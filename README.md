@@ -63,11 +63,20 @@ LLM_PROVIDER=gemini
 LLM_MODEL=<tên model Gemini hiện có trong free tier>
 LLM_API_KEY=<key từ Google AI Studio>
 ```
-Groq: `LLM_PROVIDER=openai_compat`, `LLM_BASE_URL=https://api.groq.com/openai/v1`, `LLM_MODEL=<model>`, `LLM_API_KEY=<key>`.
-Ollama local: `LLM_BASE_URL=http://localhost:11434/v1`, `LLM_MODEL=qwen2.5:7b`, bỏ trống key.
+Groq: 
+`LLM_PROVIDER=openai_compat`, 
+`LLM_BASE_URL=https://api.groq.com/openai/v1`, 
+`LLM_MODEL=<model>`, 
+`LLM_API_KEY=<key>`.
+Ollama local: 
+`LLM_BASE_URL=http://localhost:11434/v1`, 
+`LLM_MODEL=qwen2.5:7b`, 
+bỏ trống key.
+
 Tên model và hạn mức free tier thay đổi theo thời gian — kiểm tra trên trang của nhà cung cấp.
 
-Embedding thật: `pip install sentence-transformers`, rồi `EMBEDDING_PROVIDER=sentence_transformers`.
+Embedding thật: 
+`pip install sentence-transformers`, rồi `EMBEDDING_PROVIDER=sentence_transformers`.
 **Đổi embedding model thì phải xoá `data/` và ingest lại** (số chiều vector khác nhau).
 
 ## API chính

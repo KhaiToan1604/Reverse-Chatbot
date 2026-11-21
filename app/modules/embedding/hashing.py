@@ -28,6 +28,7 @@ class HashingEmbedder:
         feats = list(toks)
         joined = " ".join(toks)
         feats += [joined[i : i + 3] for i in range(max(0, len(joined) - 2))]
+        # "Mẹo băm": mỗi đặc trưng cộng +1/-1 vào một ô (theo hash) -> vector cố định chiều, chuẩn hoá L2 ở cuối.
         for f in feats:
             h = zlib.crc32(f.encode("utf-8"))
             v[h % self.dim] += 1.0 if (h >> 16) & 1 else -1.0

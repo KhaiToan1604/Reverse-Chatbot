@@ -1,3 +1,5 @@
+"""Endpoint hệ thống: kiểm tra sống (/health) và báo cáo chất lượng câu hỏi (/evaluation/report)."""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session

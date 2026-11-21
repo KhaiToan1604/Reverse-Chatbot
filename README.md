@@ -37,41 +37,53 @@ Lắp ráp ở `app/container.py`; API ở `app/api/routers/`.
 ## Chạy cả hệ thống (một lệnh phục vụ cả giao diện)
 
 ```bash
-cd frontend && npm install && npm run build && cd..    # tạo frontend/dist
-python -m uvicorn app.main:app                          # mở http://localhost:8000
+cd frontend  
+npm install 
+npm run build                           # tạo frontend/dist
+cd..    
+python -m uvicorn app.main:app           # mở http://localhost:8000
 ```
 Nếu `frontend/dist` tồn tại, backend phục vụ giao diện ở `/` (đường dẫn `frontend_dist`, chạy từ thư mục gốc dự án);
-các API vẫn ở nguyên đường dẫn cũ nên không cần CORS. Khi sửa giao diện: `cd frontend && npm run dev`
+các API vẫn ở nguyên đường dẫn cũ nên không cần CORS. Khi sửa giao diện: 
+```bash
+cd frontend
+npm run dev
+```
 (cổng 5173, tự chuyển tiếp API sang `localhost:8000`; đổi bằng biến `BACKEND_URL`).
 
 ## Chạy riêng backend
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env            # set .env thành mặc định: mock LLM + hashing embedding, chạy offline được
+cp .env.example .env            # mặc định: mock LLM + hashing embedding, chạy offline được
 python -m scripts.ingest data/sample
 python -m scripts.generate --all    # sinh sẵn ngân hàng câu hỏi (giảm gọi LLM lúc học)
 python -m uvicorn app.main:app --reload       # docs: http://localhost:8000/docs
-python -m pytest
+pip install -r requirements-dev.txt   # chỉ cần cho test/lint
+python -m pytest tests/unit tests/integration --cov   # unit + integration + coverage (ngưỡng 85%)
+python -m playwright install chromium
+python -m pytest tests/e2e   # E2E (cần đã build frontend)
+python -m ruff check app scripts tests               # lint
+# hoặc: make ci
 ```
 
-### Dùng LLM thật
+### Dùng LLM thật (ngân sách ~0đ)
 
 `.env` — Gemini free tier:
-```
+```bash
 LLM_PROVIDER=gemini
 LLM_MODEL=<tên model Gemini hiện có trong free tier>
 LLM_API_KEY=<key từ Google AI Studio>
 ```
 Groq: 
-```
+```bash
 `LLM_PROVIDER=openai_compat`
 `LLM_BASE_URL=https://api.groq.com/openai/v1`
 `LLM_MODEL=<model>`
 `LLM_API_KEY=<key>`
 ```
 Ollama local: 
-```
+```bash
 `LLM_BASE_URL=http://localhost:11434/v1`
 `LLM_MODEL=qwen2.5:7b`
 ```
@@ -80,7 +92,7 @@ bỏ trống key.
 Tên model và hạn mức free tier thay đổi theo thời gian — kiểm tra trên trang của nhà cung cấp.
 
 Embedding thật: 
-```
+```bash
 `pip install sentence-transformers`
 `EMBEDDING_PROVIDER=sentence_transformers`
 ```
@@ -133,3 +145,15 @@ React + TypeScript + Vite, định tuyến bằng hash (`#/quiz/3`) nên chỉ c
 
 `GET /catalog` là endpoint công khai (chỉ tên tài liệu, số mục, đã có câu hỏi sẵn chưa) để người học chọn phạm vi mà không cần khoá quản trị.
 Người học chỉ lưu `user_id` ở trình duyệt (`localStorage`), nên xoá dữ liệu trình duyệt là mất tiến độ cho tới khi có đăng nhập thật.
+
+## Kiểm thử & CI/CD
+
+| Tầng | Thư mục | Nội dung |
+|---|---|---|
+| Unit | `tests/unit` | text utils, chunker, rules, grading, mastery, vector store, loaders, providers (httpx mock) |
+| Integration | `tests/integration` | FastAPI TestClient + DB + vector store thật (LLM mock), auth, lỗi, đánh giá, CLI |
+| E2E | `tests/e2e` | uvicorn thật + Playwright/Chromium trên giao diện React đã build |
+
+CI (`.github/workflows/ci.yml`): lint + unit/integration (Python 3.11, 3.12, coverage ≥ 85%) → build frontend → E2E → build Docker và smoke test `/health`.
+Release (`release.yml`): đẩy image lên GHCR khi tạo tag `v*`. Dependabot và pre-commit đã cấu hình.
+Docker: `docker compose up --build`.

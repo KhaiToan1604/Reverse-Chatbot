@@ -1,3 +1,5 @@
+import numpy as np
+
 from app.common.text import norm_loose, norm_text
 from app.config import Settings
 from app.db.models import Mastery, Question
@@ -8,7 +10,6 @@ from app.modules.grading.rule_based import grade_fill_blank_rule, grade_mcq
 from app.modules.ingestion.chunker import chunk_text
 from app.modules.llm.base import extract_json
 from app.modules.vectorstore.numpy_store import NumpyVectorStore
-import numpy as np
 
 
 def test_chunker_respects_headings_and_size():
@@ -61,7 +62,9 @@ def _q(**kw):
 
 def test_grade_mcq_accepts_letter_or_text():
     q = _q()
-    assert grade_mcq(q, "c").is_correct and grade_mcq(q, "C.").is_correct and grade_mcq(q, "z").is_correct
+    assert grade_mcq(q, "c").is_correct
+    assert grade_mcq(q, "C.").is_correct
+    assert grade_mcq(q, "z").is_correct
     assert not grade_mcq(q, "a").is_correct
 
 
@@ -78,10 +81,14 @@ def test_mastery_progression():
     m = Mastery(user_id=1, chunk_id=1, mastery=0.0, streak=0, correct_count=0, wrong_count=0)
     now = datetime(2026, 1, 1)
     assert desired_level(None, s) == "recall"
-    apply_attempt(m, 1.0, now, s); apply_attempt(m, 1.0, now, s)
-    assert m.streak == 2 and desired_level(m, s) == "apply"
+    apply_attempt(m, 1.0, now, s)
+    apply_attempt(m, 1.0, now, s)
+    assert m.streak == 2
+    assert desired_level(m, s) == "apply"
     apply_attempt(m, 0.0, now, s)
-    assert m.streak == 0 and m.due_at == now and m.wrong_count == 1
+    assert m.streak == 0
+    assert m.due_at == now
+    assert m.wrong_count == 1
 
 
 def test_vector_store_search_and_delete():

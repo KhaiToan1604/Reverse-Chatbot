@@ -1,13 +1,18 @@
+"""Kiểu dữ liệu của bước sinh câu hỏi."""
+
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+# Bốn loại câu hỏi và hai mức nhận thức (theo thang Bloom rút gọn) mà hệ thống hỗ trợ.
 QTYPES = ("mcq", "fill_blank", "short_answer", "scenario")
 LEVELS = ("recall", "apply")
 
 
 @dataclass
 class Spec:
+    """Yêu cầu sinh: loại + mức + số câu (ví dụ Spec("mcq", "recall"))."""
+
     qtype: str
     level: str
     count: int = 1
@@ -24,6 +29,8 @@ def default_specs() -> list[Spec]:
 
 
 class RubricItem(BaseModel):
+    """Một ý cần có trong đáp án tự luận, kèm trọng số."""
+
     point: str
     weight: float = 1.0
 
@@ -44,6 +51,7 @@ class RawQuestion(BaseModel):
     explanation: str = ""
     source_quote: str = ""
 
+    # Hai validator dưới đây "dung thứ" output hơi lệch của LLM (rubric là list chuỗi, alt_answers là một chuỗi).
     @field_validator("rubric", mode="before")
     @classmethod
     def _coerce_rubric(cls, v):

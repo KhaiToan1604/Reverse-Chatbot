@@ -1,4 +1,10 @@
-from datetime import datetime, timezone
+"""Các bảng CSDL. Quan hệ chính:
+
+Document 1-n Chunk 1-n Question;  User 1-n QuizSession 1-n Attempt (mỗi lần trả lời một câu);
+Mastery là (User, Chunk) -> mức nắm vững + lịch ôn.
+"""
+
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -7,10 +13,13 @@ from app.db.base import Base
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    """Giờ UTC không kèm múi giờ (SQLite không lưu tzinfo), dùng nhất quán cho mọi cột thời gian."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Document(Base):
+    """Một tài liệu nguồn đã nạp. `content_hash` duy nhất để nạp lại cùng nội dung thì không tạo trùng."""
+
     __tablename__ = "documents"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -23,6 +32,8 @@ class Document(Base):
 
 
 class Chunk(Base):
+    """Một đoạn của tài liệu (đơn vị sinh câu hỏi và đơn vị theo dõi mức nắm vững). `position` là thứ tự trong tài liệu."""
+
     __tablename__ = "chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -36,6 +47,8 @@ class Chunk(Base):
 
 
 class Question(Base):
+    """Câu hỏi đã sinh. Câu bị loại vẫn được lưu (status="rejected" + reject_reason) để đo chất lượng."""
+
     __tablename__ = "questions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -58,6 +71,8 @@ class Question(Base):
 
 
 class User(Base):
+    """Người học. Chưa có đăng nhập thật: chỉ có tên hiển thị."""
+
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -66,6 +81,8 @@ class User(Base):
 
 
 class QuizSession(Base):
+    """Một phiên học. `current_question_id` là câu đang chờ trả lời (để gọi /next lặp lại không đổi câu)."""
+
     __tablename__ = "quiz_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -81,6 +98,8 @@ class QuizSession(Base):
 
 
 class Attempt(Base):
+    """Một lần trả lời. `graded_by`: rule (luật), llm (chấm bằng AI) hoặc fallback (AI lỗi, chấm bằng từ khoá)."""
+
     __tablename__ = "attempts"
 
     id: Mapped[int] = mapped_column(primary_key=True)

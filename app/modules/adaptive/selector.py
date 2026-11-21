@@ -48,6 +48,8 @@ class QuestionSelector:
         asked_q = {r[0] for r in sess_rows}
         asked_chunks = {r[1] for r in sess_rows}
 
+        # Khoá sắp xếp (nhỏ hơn = ưu tiên hơn): (đã hỏi trong phiên này, nhóm, khoá phụ)
+        #   nhóm 0: chưa học (ngẫu nhiên)  | nhóm 1: đến hạn ôn (yếu trước) | nhóm 2: chưa đến hạn (sắp đến hạn trước)
         def priority(c: Chunk) -> tuple:
             m = mastery.get(c.id)
             if m is None:
@@ -58,6 +60,7 @@ class QuestionSelector:
                 tier, key = 2, (m.due_at - now).total_seconds()
             return (c.id in asked_chunks, tier, key)  # tránh lặp chunk trong cùng phiên
 
+        # Duyệt chunk theo ưu tiên, lấy câu đầu tiên tìm được; sinh theo yêu cầu tối đa MAX_ON_DEMAND_TRIES lần để không treo.
         tries = 0
         for c in sorted(chunks, key=priority):
             level = desired_level(mastery.get(c.id), self.s)
@@ -71,13 +74,16 @@ class QuestionSelector:
         return None
 
     def _from_bank(self, db: Session, user_id: int, chunk_id: int, level: str, asked_q: set[int]) -> Question | None:
+        """Chọn một câu hợp lệ chưa hỏi trong phiên: ưu tiên đúng mức, rồi câu người này ít được hỏi nhất."""
         qs = db.scalars(select(Question).where(Question.chunk_id == chunk_id, Question.status == "valid")).all()
         qs = [q for q in qs if q.id not in asked_q]
         if not qs:
             return None
         counts = dict(
             db.execute(
-                select(Attempt.question_id, func.count()).where(Attempt.user_id == user_id, Attempt.question_id.in_([q.id for q in qs])).group_by(Attempt.question_id)
+                select(Attempt.question_id, func.count())
+                .where(Attempt.user_id == user_id, Attempt.question_id.in_([q.id for q in qs]))
+                .group_by(Attempt.question_id)
             ).all()
         )
         qs.sort(key=lambda q: (q.level != level, counts.get(q.id, 0), q.id))  # đúng mức -> ít được hỏi nhất

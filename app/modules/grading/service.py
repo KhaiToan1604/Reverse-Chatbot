@@ -1,3 +1,5 @@
+"""Chọn cách chấm theo loại câu hỏi: trắc nghiệm/điền khuyết bằng luật, câu mở bằng rubric + LLM."""
+
 from app.config import Settings
 from app.db.models import Question
 from app.modules.grading.llm_grader import LLMGrader
@@ -10,6 +12,8 @@ from app.modules.llm.base import LLMProvider
 
 
 class GradingService:
+    """Điểm vào duy nhất của việc chấm; QuizService chỉ cần gọi `grade`."""
+
     def __init__(self, settings: Settings, llm: LLMProvider):
         self.s = settings
         self.llm_grader = LLMGrader(llm, settings.pass_threshold)
@@ -21,6 +25,7 @@ class GradingService:
         if q.qtype == "mcq":
             return grade_mcq(q, answer)
 
+        # Điền khuyết: luật trước (nhanh, miễn phí); không khớp mới nhờ LLM xét cách nói đồng nghĩa.
         if q.qtype == "fill_blank":
             res = grade_fill_blank_rule(q, answer, self.s.fuzzy_threshold)
             if res:
@@ -32,4 +37,4 @@ class GradingService:
                 return r
             return GradeResult(0.0, False, "Chưa chính xác.", [q.answer], "rule")
 
-        return self.llm_grader.grade(q, answer)
+        return self.llm_grader.grade(q, answer)  # short_answer / scenario

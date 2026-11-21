@@ -1,0 +1,43 @@
+[project]
+name = "reverse-chatbot"
+version = "0.1.0"
+description = "Reverse Chatbot: hệ thống RAG đảo chiều, hỏi người học từ tài liệu đã nạp"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "unit: kiểm thử đơn vị, không DB, không mạng, không tiến trình ngoài",
+    "integration: kiểm thử tích hợp nhiều module qua API (TestClient) hoặc DB thật trên đĩa",
+    "e2e: kiểm thử đầu cuối, chạy server thật và (với test giao diện) trình duyệt thật",
+]
+filterwarnings = ["error::ResourceWarning"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+extend-exclude = ["frontend", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "S", "PT"]
+ignore = [
+    "S101",  # assert dùng trong test và kiểm tra bất biến
+    "B008",  # Depends(...) là cách dùng chuẩn của FastAPI
+    "S311",  # random chỉ dùng để xáo trộn/lấy mẫu, không dùng cho mật mã
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/modules/generation/prompts.py" = ["E501"]
+"app/modules/grading/heuristic.py" = ["E501"]
+"tests/**" = ["S105", "S106", "S311", "S603", "S607", "PT011", "PT018"]

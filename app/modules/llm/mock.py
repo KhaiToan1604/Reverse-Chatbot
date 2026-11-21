@@ -13,6 +13,7 @@ from app.modules.llm.markers import get_section
 
 
 def _sentences(context: str) -> list[str]:
+    """Tách ngữ cảnh thành các câu đủ dài (>= 6 từ), bỏ dòng tiêu đề [Mục: ...] và gạch đầu dòng."""
     body = re.sub(r"^\[Mục:.*?\]\s*$", "", context, flags=re.M)
     out = []
     for line in re.split(r"\n+|(?<=[.!?])\s+", body):
@@ -23,6 +24,8 @@ def _sentences(context: str) -> list[str]:
 
 
 class MockLLM(LLMProvider):
+    """Nhận biết nhiệm vụ qua thẻ [[TASK:...]] trong system prompt (xem prompts.py của generation và grading)."""
+
     name = "mock"
     model = "mock-1"
 
@@ -37,6 +40,7 @@ class MockLLM(LLMProvider):
 
     # -- sinh câu hỏi --
     def _generate(self, user: str) -> dict:
+        """Dựng câu hỏi từ chính câu trong tài liệu, nên luôn có căn cứ và luôn qua kiểm tra."""
         context = get_section(user, "CONTEXT") or ""
         specs = json.loads(get_section(user, "SPEC") or "[]")
         sents = _sentences(context)
@@ -76,6 +80,7 @@ class MockLLM(LLMProvider):
 
     # -- chấm điểm --
     def _grade(self, user: str) -> dict:
+        """Mỗi ý rubric được coi là "đã nêu" nếu câu trả lời phủ đủ từ khoá của ý đó."""
         rubric = json.loads(get_section(user, "RUBRIC") or "[]")
         student = get_section(user, "STUDENT") or ""
         covered = [point_covered(r["point"], student) for r in rubric]

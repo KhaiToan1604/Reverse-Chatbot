@@ -1,3 +1,4 @@
+// Thành phần giao diện nhỏ dùng chung: Busy (đang tải), ErrorNote (lỗi + thử lại), Meter (thanh %), nhãn tiếng Việt, hook useLoad.
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
@@ -20,6 +21,7 @@ export function ErrorNote({ error, onRetry }: { error: string | null; onRetry?: 
   );
 }
 
+/** Thanh tiến độ 0..1; kẹp giá trị để không tràn thanh. */
 export function Meter({ value, label }: { value: number; label: string }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
@@ -39,7 +41,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    let live = true;
+    let live = true; // cờ chặn cập nhật state sau khi component đã gỡ hoặc deps đã đổi (tránh race)
     setLoading(true);
     setError(null);
     fn().then((d) => live && setData(d)).catch((e: Error) => live && setError(e.message)).finally(() => live && setLoading(false));
@@ -49,6 +51,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { data, error, loading, reload: () => setTick((t) => t + 1), setData };
 }
 
+/** Đổi thời điểm ôn lại (ISO, UTC không kèm "Z" từ backend) thành chữ như "ôn lại sau 3 ngày". */
 export function fmtDue(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso + "Z");

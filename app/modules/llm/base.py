@@ -1,3 +1,5 @@
+"""Giao diện chung của mọi nhà cung cấp LLM và bộ trích JSON chịu lỗi."""
+
 import json
 import re
 from abc import ABC, abstractmethod
@@ -5,7 +7,7 @@ from typing import Any
 
 
 class LLMError(RuntimeError):
-    pass
+    """Mọi lỗi khi gọi/đọc kết quả LLM; main.py đổi thành HTTP 502, bộ chấm đổi thành chấm dự phòng."""
 
 
 def extract_json(text: str) -> Any:
@@ -46,7 +48,13 @@ def extract_json(text: str) -> Any:
     raise LLMError(f"Không parse được JSON từ output: {text[:200]!r}")
 
 
+class LLMRateLimited(LLMError):
+    """Hết hạn mức gọi (HTTP 429) sau khi đã chờ và thử lại. Chạy tiếp ngay chỉ tốn thời gian: nên dừng và đợi."""
+
+
 class LLMProvider(ABC):
+    """Thêm nhà cung cấp mới: kế thừa lớp này, cài `complete`, rồi đăng ký trong llm/factory.py."""
+
     name: str = "base"
     model: str = ""
 

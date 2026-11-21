@@ -1,3 +1,5 @@
+"""Giao diện của bộ nhúng vector. Dùng Protocol nên bản giả/bản thật chỉ cần đúng chữ ký, không cần kế thừa."""
+
 from typing import Protocol
 
 import numpy as np

@@ -1,3 +1,5 @@
+"""Quy trình nạp tài liệu: đọc -> chia chunk -> nhúng vector -> lưu CSDL và vector store."""
+
 import hashlib
 from dataclasses import dataclass
 
@@ -14,16 +16,21 @@ from app.modules.vectorstore.numpy_store import NumpyVectorStore
 
 @dataclass
 class IngestResult:
+    """Kết quả nạp; `already_existed` = True khi nội dung đã có từ trước (không tạo mới)."""
+
     document: Document
     num_chunks: int
     already_existed: bool
 
 
 def chunk_embedding_text(heading: str, text: str) -> str:
+    """Văn bản dùng để tạo vector: ghép tiêu đề vào nội dung để ngữ nghĩa mục được tính vào vector."""
     return f"{heading}\n{text}" if heading else text
 
 
 class IngestionService:
+    """Nạp/xoá tài liệu. Giữ CSDL (chunk) và vector store đồng bộ với nhau."""
+
     def __init__(self, settings: Settings, embedder: Embedder, store: NumpyVectorStore):
         self.s = settings
         self.embedder = embedder
@@ -45,16 +52,18 @@ class IngestionService:
             raise ValueError("Tài liệu không có nội dung để chia chunk.")
 
         doc = Document(title=title, source=source, content_hash=content_hash)
+        # Thứ tự quan trọng: flush trước để chunk có id, vì vector store lưu theo id chunk.
         doc.chunks = [Chunk(position=i, heading=c.heading, text=c.text) for i, c in enumerate(raw)]
         db.add(doc)
         db.flush()  # có id cho chunk
 
         vecs = self.embedder.embed([chunk_embedding_text(c.heading, c.text) for c in doc.chunks])
         self.store.add([c.id for c in doc.chunks], vecs)
-        db.commit()
+        db.commit()  # chỉ commit sau khi vector đã ghi xong, tránh DB có chunk mà thiếu vector
         return IngestResult(doc, len(doc.chunks), False)
 
     def delete_document(self, db: Session, document_id: int) -> bool:
+        """Xoá tài liệu cùng chunk, câu hỏi, lượt trả lời, mastery và vector liên quan. False nếu không tồn tại."""
         doc = db.get(Document, document_id)
         if not doc:
             return False

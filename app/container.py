@@ -1,3 +1,8 @@
+"""Lắp ráp (dependency injection thủ công) toàn bộ module từ một `Settings`.
+
+Thêm module mới: tạo ở đây rồi thêm vào `Container`; router lấy qua `get_container`.
+"""
+
 from dataclasses import dataclass
 
 from app.config import Settings
@@ -29,12 +34,14 @@ class Container:
 
 
 def build_container(s: Settings, llm: LLMProvider | None = None, embedder: Embedder | None = None) -> Container:
+    """Tạo các module theo thứ tự phụ thuộc: nền tảng (llm, embedder, store) -> dịch vụ -> quiz."""
     llm = llm or build_llm(s)
     embedder = embedder or build_embedder(s)
+    # ":memory:" nghĩa là không ghi ra đĩa (dùng trong test).
     store = NumpyVectorStore(None if s.vector_store_path == ":memory:" else s.vector_store_path)
     ingestion = IngestionService(s, embedder, store)
     generation = GenerationService(s, llm, embedder, store)
     grader = GradingService(s, llm)
-    selector = QuestionSelector(s, generation)
+    selector = QuestionSelector(s, generation)  # cần generation để sinh câu theo yêu cầu
     quiz = QuizService(s, selector, grader)
     return Container(s, llm, embedder, store, ingestion, generation, grader, selector, quiz)

@@ -1,3 +1,5 @@
+"""Định dạng dữ liệu gửi lên API và giới hạn hợp lệ (Pydantic tự trả 422 nếu vi phạm)."""
+
 from pydantic import BaseModel, Field
 
 from app.modules.generation.schemas import LEVELS, QTYPES
@@ -9,6 +11,8 @@ class TextIngestIn(BaseModel):
 
 
 class SpecIn(BaseModel):
+    """Yêu cầu sinh: loại câu hỏi + mức nhận thức + số lượng. Giá trị hợp lệ kiểm bằng validate_values."""
+
     qtype: str
     level: str
     count: int = Field(default=1, ge=1, le=5)
@@ -19,6 +23,8 @@ class SpecIn(BaseModel):
 
 
 class GenerateIn(BaseModel):
+    """Sinh câu hỏi cho một chunk hoặc cả tài liệu; bỏ `specs` thì dùng bộ mặc định."""
+
     document_id: int | None = None
     chunk_id: int | None = None
     specs: list[SpecIn] | None = None

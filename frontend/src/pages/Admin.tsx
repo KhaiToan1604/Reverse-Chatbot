@@ -1,3 +1,5 @@
+// Khu quản trị, chia ba tab: Tài liệu (nạp, sinh câu hỏi, xoá), Câu hỏi (duyệt, kể cả câu bị loại), Báo cáo chất lượng.
+// Khoá X-Admin-Key nhập một lần, lưu ở sessionStorage; backend mới là nơi kiểm tra thật.
 import { useState } from "react";
 import { adminKey, api } from "../api";
 import { Busy, ErrorNote, levelLabel, typeLabel, useLoad } from "../components/ui";
@@ -45,6 +47,7 @@ export default function Admin() {
   );
 }
 
+/** Tab tài liệu: tải file hoặc dán văn bản để nạp; mỗi dòng có nút sinh câu hỏi và xoá. */
 function Docs({ docs, reload }: { docs: DocItem[]; reload: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -101,6 +104,7 @@ function Docs({ docs, reload }: { docs: DocItem[]; reload: () => void }) {
   );
 }
 
+/** Một tài liệu: xem các mục (chunk), sinh câu hỏi cho cả tài liệu, xoá. */
 function DocRow({ d, busy, onGenerate, onDelete }: { d: DocItem; busy: boolean; onGenerate: () => void; onDelete: () => void }) {
   const [chunks, setChunks] = useState<ChunkItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -124,6 +128,7 @@ function DocRow({ d, busy, onGenerate, onDelete }: { d: DocItem; busy: boolean; 
   );
 }
 
+/** Tab câu hỏi: lọc theo trạng thái, loại, mức, tài liệu; để người duyệt kiểm tra đáp án và căn cứ. */
 function Questions({ docs }: { docs: DocItem[] }) {
   const [status, setStatus] = useState("valid");
   const [qtype, setQtype] = useState("");
@@ -154,6 +159,7 @@ function Questions({ docs }: { docs: DocItem[] }) {
   );
 }
 
+/** Một câu hỏi kèm đáp án, rubric, trích dẫn nguồn và lý do bị loại (nếu có). */
 function QRow({ q }: { q: AdminQuestion }) {
   return (
     <details className="attempt">
@@ -170,6 +176,7 @@ function QRow({ q }: { q: AdminQuestion }) {
   );
 }
 
+/** Tab báo cáo: tỉ lệ câu qua kiểm định tự động và lý do bị loại (từ /evaluation/report). */
 function ReportTab() {
   const { data: r, error, loading, reload } = useLoad(api.report, []);
   if (loading) return <Busy>Đang tải báo cáo…</Busy>;

@@ -1,3 +1,5 @@
+"""Nghiệp vụ phiên học: bắt đầu, lấy câu kế tiếp, nộp đáp án, tổng kết, tiến độ người học."""
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +27,8 @@ def public_question(db: Session, q: Question) -> dict:
 
 
 class QuizService:
+    """Điều phối chọn câu (selector), chấm (grader) và cập nhật mức nắm vững sau mỗi câu."""
+
     def __init__(self, settings: Settings, selector: QuestionSelector, grader: GradingService):
         self.s = settings
         self.selector = selector
@@ -57,6 +61,10 @@ class QuizService:
         db.commit()
 
     def next_question(self, db: Session, session_id: int) -> dict:
+        """Trả câu hiện tại của phiên; chưa có thì chọn mới và ghi vào phiên.
+
+        Gọi lặp lại không đổi câu (idempotent) vì câu đang chờ được lưu ở `current_question_id`.
+        """
         sess = self._get_session(db, session_id)
         answered = self._answered(db, sess)
         if sess.status == "finished" or answered >= sess.num_questions:
@@ -74,6 +82,7 @@ class QuizService:
         return {"done": False, "answered": answered, "total": sess.num_questions, "question": public_question(db, q)}
 
     def submit_answer(self, db: Session, session_id: int, question_id: int, answer: str) -> dict:
+        """Chấm, lưu lượt trả lời, cập nhật mastery. Chỉ chấp nhận đúng câu hiện tại (tránh nộp lặp/nộp sai câu)."""
         sess = self._get_session(db, session_id)
         if sess.status == "finished":
             raise Conflict("Phiên đã kết thúc")
@@ -101,6 +110,7 @@ class QuizService:
         else:
             db.commit()
 
+        # Đáp án chuẩn chỉ tiết lộ SAU khi đã nộp bài (xem public_question: câu hỏi ban đầu không chứa đáp án).
         chunk = db.get(Chunk, q.chunk_id)
         ref = q.answer
         if q.qtype == "mcq" and q.options:
@@ -123,6 +133,7 @@ class QuizService:
         by_topic: dict[str, list[float]] = {}
         for a, _q, c in rows:
             by_topic.setdefault(c.heading or f"Chunk {c.id}", []).append(a.score)
+        # chủ đề yếu = điểm trung bình thấp hơn ngưỡng đạt, xếp từ yếu nhất
         weak = sorted(((t, sum(v) / len(v)) for t, v in by_topic.items()), key=lambda x: x[1])
         n = len(rows)
         return {
@@ -138,6 +149,7 @@ class QuizService:
         }
 
     def user_progress(self, db: Session, user_id: int, document_id: int | None = None) -> dict:
+        """Mức nắm vững theo từng chunk; "due" = đã học và đến hạn ôn (chưa học thì không tính là đến hạn)."""
         if not db.get(User, user_id):
             raise NotFound("Không tìm thấy người dùng")
         stmt = select(Chunk, Document).join(Document, Chunk.document_id == Document.id).order_by(Chunk.id)

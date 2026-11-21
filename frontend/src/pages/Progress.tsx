@@ -1,3 +1,4 @@
+// Tiến độ của người học theo từng chủ đề (chunk): mức nắm vững, chuỗi đúng liên tiếp, và mục đến hạn ôn.
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
@@ -8,6 +9,7 @@ export default function Progress({ user, onMissingUser }: { user: User | null; o
   const nav = useNavigate();
   const [startError, setStartError] = useState<string | null>(null);
   const { data, error, loading, reload } = useLoad(() => (user ? api.progress(user.id) : Promise.resolve(null)), [user?.id]);
+  // Nếu backend báo không còn người dùng này (ví dụ DB bị xoá) thì xoá người dùng cũ ở trình duyệt.
   const gone = error !== null && /người dùng/i.test(error);
   useEffect(() => { if (gone) onMissingUser(); }, [gone, onMissingUser]);
 
@@ -15,6 +17,7 @@ export default function Progress({ user, onMissingUser }: { user: User | null; o
   if (loading) return <Busy>Đang tải tiến độ…</Busy>;
   if (error || !data) return <ErrorNote error={error ?? "Không tải được tiến độ."} onRetry={reload} />;
 
+  // Gom chủ đề theo tài liệu để hiển thị thành từng nhóm.
   const byDoc = new Map<string, TopicProgress[]>();
   data.topics.forEach((t) => byDoc.set(t.document, [...(byDoc.get(t.document) ?? []), t]));
 

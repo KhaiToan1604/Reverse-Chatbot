@@ -1,3 +1,4 @@
+// Hiển thị một câu hỏi và thu đáp án. Ô nhập đổi theo loại: mcq = nút chọn; fill_blank = một dòng; còn lại = nhiều dòng.
 import { useEffect, useRef, useState } from "react";
 import type { PublicQuestion } from "../types";
 import { levelLabel, typeLabel } from "./ui";
@@ -16,8 +17,10 @@ export default function QuestionCard({ q, index, total, disabled, onSubmit }: Pr
   const [choice, setChoice] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
 
+  // Sang câu mới thì xoá đáp án cũ và đưa con trỏ vào ô nhập.
   useEffect(() => { setText(""); setChoice(null); inputRef.current?.focus(); }, [q.question_id]);
 
+  // Với trắc nghiệm gửi chữ cái (A-D) vì backend chấm theo chữ cái; các loại khác gửi chuỗi người học gõ.
   const answer = q.qtype === "mcq" ? (choice ?? "") : text.trim();
   const submit = () => { if (answer && !disabled) onSubmit(answer); };
 

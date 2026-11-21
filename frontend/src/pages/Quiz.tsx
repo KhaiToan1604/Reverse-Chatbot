@@ -1,3 +1,5 @@
+// Màn hình làm bài: lấy câu (/next) -> người học gửi đáp án (/answer) -> hiện phản hồi -> "Câu tiếp theo".
+// Hết câu thì chuyển sang trang tổng kết. Các state: cur (câu hiện tại), result (kết quả vừa chấm).
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
@@ -24,6 +26,7 @@ export default function Quiz() {
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }, [sid, nav]);
 
+  // Tải câu đầu tiên khi vào trang. Gọi /next lặp lại không đổi câu (backend lưu câu đang chờ) nên an toàn khi tải lại trang.
   useEffect(() => { void loadNext(); }, [loadNext]);
 
   const submit = async (answer: string) => {

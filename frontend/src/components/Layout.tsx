@@ -1,3 +1,4 @@
+// Khung chung của mọi trang: thanh trên cùng (tên hệ thống, điều hướng, người dùng hiện tại) và vùng nội dung.
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type { User } from "../types";

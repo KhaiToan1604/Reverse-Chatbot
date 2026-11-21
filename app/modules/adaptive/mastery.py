@@ -1,3 +1,5 @@
+"""Mô hình người học: mức nắm vững (EMA) và lịch ôn lại (Leitner đơn giản). Hai hàm thuần, dễ kiểm thử."""
+
 from datetime import datetime, timedelta
 
 from app.config import Settings
@@ -16,6 +18,7 @@ def apply_attempt(m: Mastery, score: float, now: datetime, s: Settings) -> Maste
     m.correct_count = (m.correct_count or 0) + (1 if correct else 0)
     m.wrong_count = (m.wrong_count or 0) + (0 if correct else 1)
     m.last_seen = now
+    # streak càng cao thì khoảng ôn càng dài; vượt độ dài danh sách thì dùng khoảng cuối cùng.
     intervals = s.review_intervals_hours
     m.due_at = now + timedelta(hours=intervals[min(m.streak, len(intervals) - 1)])
     return m

@@ -6,7 +6,9 @@ import re
 from app.common.text import norm_text
 from app.modules.generation.schemas import LEVELS, QTYPES, RawQuestion
 
+# Chỗ trống hợp lệ trong câu điền khuyết: ___ (>=3 gạch dưới), .... hoặc ……
 BLANK_RE = re.compile(r"_{3,}|\.{4,}|…{2,}")
+# Tiền tố "A.", "b)", "1." mà LLM hay tự thêm vào lựa chọn; cần bỏ đi trước khi lưu.
 OPTION_PREFIX_RE = re.compile(r"^\s*(?:[A-Da-d][\.\):]|\d[\.\)])\s+")
 
 
@@ -15,8 +17,9 @@ def grounded(quote: str, context: str, min_tokens: int = 4) -> bool:
     q, c = norm_text(quote), norm_text(context)
     if len(q.split()) < min_tokens:
         return False
-    if q in c:
+    if q in c:  # khớp nguyên văn (sau chuẩn hoá)
         return True
+    # cho phép lệch nhẹ (LLM đổi vài từ): >= 92% từ của trích dẫn phải có trong ngữ cảnh
     qt = q.split()
     cset = set(c.split())
     return sum(t in cset for t in qt) / len(qt) >= 0.92
@@ -87,5 +90,6 @@ def finalize(q: RawQuestion) -> dict:
             {"point": r.point.strip(), "weight": round((max(r.weight, 0) or 1.0) / total, 4)} for r in q.rubric
         ]
         s = sum(r["weight"] for r in out["rubric"])
+        # làm tròn có thể lệch vài phần vạn: bù vào ý cuối để tổng trọng số đúng bằng 1
         out["rubric"][-1]["weight"] = round(out["rubric"][-1]["weight"] + (1 - s), 4)  # tổng đúng 1
     return out

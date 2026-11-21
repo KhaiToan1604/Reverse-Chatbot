@@ -1,10 +1,11 @@
+"""Router cho người học (công khai): người dùng, phiên học, danh mục tài liệu. Logic nằm ở QuizService."""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_container
 from app.api.schemas import AnswerIn, SessionIn, UserIn
-from app.common.errors import NotFound
 from app.container import Container
 from app.db.base import get_db
 from app.db.models import Chunk, Document, Question, User
@@ -12,6 +13,7 @@ from app.db.models import Chunk, Document, Question, User
 router = APIRouter(tags=["quiz"])
 
 
+# Luồng gọi của một phiên: POST /quiz/sessions -> lặp (GET .../next -> POST .../answer) -> GET .../summary
 @router.post("/users", status_code=201)
 def create_user(body: UserIn, db: Session = Depends(get_db)):
     u = User(display_name=body.display_name.strip())
@@ -51,6 +53,7 @@ def catalog(db: Session = Depends(get_db)):
     """Danh mục tài liệu cho người học (công khai, không lộ nội dung/đáp án).
 
     has_questions = mọi mục của tài liệu đều đã có ít nhất một câu hỏi hợp lệ trong ngân hàng."""
+    # Hai truy vấn gom nhóm: tổng số chunk mỗi tài liệu, và số chunk đã có ít nhất một câu hợp lệ.
     n_chunks = dict(db.execute(select(Chunk.document_id, func.count()).group_by(Chunk.document_id)).all())
     n_covered = dict(
         db.execute(

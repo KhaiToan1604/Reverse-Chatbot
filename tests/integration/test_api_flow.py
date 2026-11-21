@@ -1,11 +1,15 @@
+from tests.conftest import SAMPLE
+
+
 def test_health(client):
     r = client.get("/health")
-    assert r.status_code == 200 and r.json()["llm"]["provider"] == "mock"
+    assert r.status_code == 200
+    assert r.json()["llm"]["provider"] == "mock"
 
 
 def test_ingest_is_idempotent(loaded):
     client, ids = loaded
-    f = open("data/sample/thu_vien_noi_quy_MAU.md", "rb").read()
+    f = (SAMPLE / "thu_vien_noi_quy_MAU.md").read_bytes()
     r = client.post("/documents", files={"file": ("x.md", f, "text/markdown")})
     assert r.json()["already_existed"] is True
     assert len(client.get("/documents").json()) == 2
@@ -26,7 +30,8 @@ def test_generate_creates_valid_questions(loaded):
     for q in body["questions"]:
         assert q["source_quote"]
         if q["qtype"] == "mcq":
-            assert q["answer"] in "ABCD" and len(q["options"]) == 4
+            assert q["answer"] in "ABCD"
+            assert len(q["options"]) == 4
 
 
 def test_quiz_does_not_leak_answers_and_grades(loaded):
@@ -36,13 +41,18 @@ def test_quiz_does_not_leak_answers_and_grades(loaded):
 
     nxt = client.get(f"/quiz/sessions/{sid}/next").json()  # sinh câu theo yêu cầu (on-demand)
     q = nxt["question"]
-    assert not nxt["done"] and "answer" not in q and "rubric" not in q and "source_quote" not in q
+    assert not nxt["done"]
+    assert "answer" not in q
+    assert "rubric" not in q
+    assert "source_quote" not in q
     # gọi /next lần nữa phải trả đúng câu hiện tại (idempotent)
     assert client.get(f"/quiz/sessions/{sid}/next").json()["question"]["question_id"] == q["question_id"]
 
     # đáp án của người học trả lời sai cố ý
     res = client.post(f"/quiz/sessions/{sid}/answer", json={"question_id": q["question_id"], "answer": "không biết"}).json()
-    assert res["is_correct"] is False and res["reference_answer"] and res["source_quote"]
+    assert res["is_correct"] is False
+    assert res["reference_answer"]
+    assert res["source_quote"]
 
     # trả lời câu không phải câu hiện tại -> 409
     assert client.post(f"/quiz/sessions/{sid}/answer", json={"question_id": q["question_id"], "answer": "x"}).status_code == 409
@@ -58,10 +68,12 @@ def test_quiz_does_not_leak_answers_and_grades(loaded):
     assert client.get(f"/quiz/sessions/{sid}/next").json()["done"] is True
 
     summ = client.get(f"/quiz/sessions/{sid}/summary").json()
-    assert summ["answered"] == 3 and summ["correct"] == 2
+    assert summ["answered"] == 3
+    assert summ["correct"] == 2
 
     prog = client.get(f"/users/{uid}/progress").json()
-    assert prog["topics_seen"] == 3 and prog["overall_mastery"] > 0
+    assert prog["topics_seen"] == 3
+    assert prog["overall_mastery"] > 0
 
 
 def test_wrong_chunk_progress_and_delete(loaded):
@@ -79,10 +91,10 @@ def test_injection_in_answer_does_not_raise_score(loaded):
     client, ids = loaded
     uid = client.post("/users", json={"display_name": "B"}).json()["id"]
     client.post("/questions/generate", json={"document_id": ids[0], "specs": [{"qtype": "scenario", "level": "apply"}]})
-    sid = client.post("/quiz/sessions", json={"user_id": uid, "num_questions": 1}).json()["session_id"]
+    client.post("/quiz/sessions", json={"user_id": uid, "num_questions": 1}).json()["session_id"]
     # buộc chọn câu tự luận: nạp nhiều lần tới khi gặp scenario (mastery chưa có -> recall trước) nên chấm trực tiếp qua service
-    from app.db.models import Question
     from app.db.base import session_scope
+    from app.db.models import Question
     with session_scope() as db:
         q = db.query(Question).filter(Question.qtype == "scenario", Question.status == "valid").first()
         c = client.app.state.container
@@ -92,6 +104,7 @@ def test_injection_in_answer_does_not_raise_score(loaded):
 
 def test_admin_key_enforced():
     from fastapi.testclient import TestClient
+
     from app.config import Settings
     from app.main import create_app
     s = Settings(database_url="sqlite:///:memory:", vector_store_path=":memory:", admin_api_key="k", _env_file=None)
@@ -104,16 +117,20 @@ def test_admin_key_enforced():
 def test_catalog_is_public_and_tracks_question_coverage(loaded):
     client, ids = loaded
     cat = client.get("/catalog").json()
-    assert [d["id"] for d in cat] == ids and all(d["num_topics"] > 0 for d in cat)
+    assert [d["id"] for d in cat] == ids
+    assert all(d["num_topics"] > 0 for d in cat)
     assert not any(d["has_questions"] for d in cat)
     client.post("/questions/generate", json={"document_id": ids[0]})
     cat = {d["id"]: d for d in client.get("/catalog").json()}
-    assert cat[ids[0]]["has_questions"] and not cat[ids[1]]["has_questions"]
-    assert "text" not in cat[ids[0]] and "answer" not in cat[ids[0]]
+    assert cat[ids[0]]["has_questions"]
+    assert not cat[ids[1]]["has_questions"]
+    assert "text" not in cat[ids[0]]
+    assert "answer" not in cat[ids[0]]
 
 
 def test_catalog_open_even_with_admin_key():
     from fastapi.testclient import TestClient
+
     from app.config import Settings
     from app.main import create_app
     s = Settings(database_url="sqlite:///:memory:", vector_store_path=":memory:", admin_api_key="k", _env_file=None)
@@ -123,6 +140,7 @@ def test_catalog_open_even_with_admin_key():
 
 def test_serves_frontend_build_without_shadowing_api(tmp_path):
     from fastapi.testclient import TestClient
+
     from app.config import Settings
     from app.main import create_app
     (tmp_path / "index.html").write_text("<!doctype html><title>fe</title>")

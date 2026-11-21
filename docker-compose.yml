@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports: ["8000:8000"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: sqlite:////srv/data/app.db
+      VECTOR_STORE_PATH: /srv/data/vectors
+    volumes: ["appdata:/srv/data"]
+volumes:
+  appdata:

@@ -1,21 +1,26 @@
+// Lớp gọi API duy nhất của giao diện. Thêm endpoint mới: thêm một dòng vào đối tượng `api` ở cuối file
+// và kiểu phản hồi tương ứng trong types.ts (giữ khớp với backend app/api/routers/).
 import type * as T from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+// Khoá quản trị lưu ở sessionStorage: mất khi đóng tab, không dùng chung giữa các tab.
 const ADMIN_KEY = "rc_admin_key";
 export const adminKey = {
   get: () => { try { return sessionStorage.getItem(ADMIN_KEY) ?? ""; } catch { return ""; } },
   set: (v: string) => { try { sessionStorage.setItem(ADMIN_KEY, v); } catch { /* bỏ qua */ } },
 };
 
+/** Backend trả lỗi dạng {"detail": chuỗi} hoặc danh sách lỗi kiểm tra của FastAPI (422); gom về một chuỗi dễ đọc. */
 function detailText(d: unknown): string {
   if (typeof d === "string") return d;
   if (Array.isArray(d)) return d.map((x) => (x && typeof x === "object" && "msg" in x ? String((x as { msg: unknown }).msg) : String(x))).join("; ");
   return "Yêu cầu không hợp lệ";
 }
 
+/** Hàm gọi chung: tự đặt Content-Type, đính X-Admin-Key khi admin=true, và đổi mọi lỗi thành ApiError (status 0 = mất kết nối). */
 async function request<R>(path: string, opts: { method?: string; body?: unknown; form?: FormData; admin?: boolean } = {}): Promise<R> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -50,7 +55,7 @@ export const api = {
     request<T.AnswerResp>(`/quiz/sessions/${sid}/answer`, { body: { question_id, answer } }),
   summary: (sid: number) => request<T.SummaryResp>(`/quiz/sessions/${sid}/summary`),
 
-  // admin
+  // --- các endpoint yêu cầu X-Admin-Key (admin: true) ---
   docs: () => request<T.DocItem[]>("/documents", { admin: true }),
   uploadDoc: (file: File, title: string) => {
     const f = new FormData();

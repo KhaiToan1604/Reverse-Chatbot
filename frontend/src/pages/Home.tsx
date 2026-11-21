@@ -1,3 +1,4 @@
+// Trang chủ: nếu chưa có người dùng thì hỏi tên; có rồi thì cho chọn tài liệu và số câu để bắt đầu phiên học.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";

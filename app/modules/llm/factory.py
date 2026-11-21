@@ -10,9 +10,9 @@ def build_llm(s: Settings) -> LLMProvider:
     if s.llm_provider == "gemini":
         from app.modules.llm.http_providers import GeminiProvider
 
-        return GeminiProvider(s.llm_api_key, s.llm_model, s.llm_timeout_s, s.llm_max_retries, s.llm_base_url)
+        return GeminiProvider(s.llm_api_key, s.llm_model, s.llm_timeout_s, s.llm_max_retries, s.llm_base_url, s.llm_min_interval_s)
     if s.llm_provider == "openai_compat":
         from app.modules.llm.http_providers import OpenAICompatProvider
 
-        return OpenAICompatProvider(s.llm_base_url, s.llm_model, s.llm_api_key, s.llm_timeout_s, s.llm_max_retries)
+        return OpenAICompatProvider(s.llm_base_url, s.llm_model, s.llm_api_key, s.llm_timeout_s, s.llm_max_retries, s.llm_min_interval_s)
     raise LLMError(f"LLM provider không hỗ trợ: {s.llm_provider}")

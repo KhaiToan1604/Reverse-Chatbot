@@ -1,4 +1,11 @@
+"""Sinh câu hỏi từ tài liệu (lõi của hệ thống).
+
+Quy trình mỗi chunk: dựng ngữ cảnh -> LLM sinh -> kiểm bằng luật -> LLM kiểm định -> loại trùng -> lưu.
+Câu không đạt vẫn được lưu với status="rejected" và lý do để đo chất lượng.
+"""
+
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -12,17 +19,23 @@ from app.modules.generation.rules import check_question, finalize
 from app.modules.generation.schemas import RawQuestion, Spec, default_specs
 from app.modules.generation.validator import llm_validate
 from app.modules.ingestion.service import chunk_embedding_text
-from app.modules.llm.base import LLMError, LLMProvider
+from app.modules.llm.base import LLMError, LLMProvider, LLMRateLimited
 from app.modules.vectorstore.numpy_store import NumpyVectorStore
 
 log = logging.getLogger(__name__)
 
+# Lý do loại khi câu mới giống câu đã có. Đây không phải lỗi chất lượng nên báo cáo đánh giá tách riêng (xem evaluation/runner.py).
+DUPLICATE_REASON = "trùng với câu hỏi đã có"
+
 
 @dataclass
 class GenerationReport:
+    """Kết quả một lần sinh: câu hợp lệ, câu bị loại, và lỗi (LLM lỗi, sai định dạng)."""
+
     created: list[Question] = field(default_factory=list)
     rejected: list[Question] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    rate_limited: bool = False  # True nếu dừng giữa chừng vì hết hạn mức gọi LLM (chạy lại sau sẽ làm tiếp)
 
 
 class GenerationService:
@@ -36,6 +49,7 @@ class GenerationService:
 
     # ---- ngữ cảnh -------------------------------------------------------------------------
     def build_context(self, db: Session, chunk: Chunk, with_neighbors: bool) -> tuple[str, list[int]]:
+        """Ngữ cảnh = chunk gốc (+ các chunk gần nghĩa nhất CÙNG tài liệu nếu with_neighbors). Trả về (văn bản, danh sách id chunk)."""
         parts = [self._fmt(chunk)]
         ids = [chunk.id]
         if with_neighbors and self.s.retrieval_top_k > 0:
@@ -54,28 +68,43 @@ class GenerationService:
 
     # ---- sinh câu hỏi -----------------------------------------------------------------------
     def generate_for_chunk(
-        self, db: Session, chunk: Chunk, specs: list[Spec] | None = None, use_rag_context: bool = True, dedupe: bool = True
+        self, db: Session, chunk: Chunk, specs: list[Spec] | None = None, use_rag_context: bool = True, dedupe: bool = True,
+        only_missing: bool = False,
     ) -> GenerationReport:
+        """only_missing=True: bỏ qua yêu cầu (loại, mức) mà chunk đã đủ câu hợp lệ -> chạy lại sau lỗi không tốn thêm lượt gọi LLM."""
         report = GenerationReport()
         specs = specs or default_specs()
+        if only_missing:
+            rows = db.execute(
+                select(Question.qtype, Question.level).where(Question.chunk_id == chunk.id, Question.status == "valid")
+            ).all()
+            have = Counter((r[0], r[1]) for r in rows)
+            specs = [sp for sp in specs if have[(sp.qtype, sp.level)] < sp.count]
+        # Mỗi mức một lượt gọi LLM. Mức "apply" cần thêm chunk lân cận để dựng tình huống nhiều bước.
         for level in ("recall", "apply"):
             lvl_specs = [sp for sp in specs if sp.level == level]
             if not lvl_specs:
                 continue
+            # judge_ctx: ngữ cảnh dùng để KIỂM TRA câu hỏi; prompt_ctx: ngữ cảnh đưa cho LLM khi sinh.
             judge_ctx, ctx_ids = self.build_context(db, chunk, with_neighbors=(level == "apply"))
             # baseline "không RAG" (dùng cho đánh giá): LLM chỉ thấy tên chủ đề, nhưng vẫn bị kiểm tra theo tài liệu thật
             prompt_ctx = judge_ctx if use_rag_context else f"[Mục: {chunk.heading or chunk.document.title}]"
             self._run(db, chunk, prompt_ctx, judge_ctx, ctx_ids, lvl_specs, report, dedupe)
+            if report.rate_limited:  # đã hết hạn mức: gọi tiếp chỉ tốn thời gian
+                break
         db.commit()
         return report
 
     def _run(self, db, chunk, prompt_ctx, context, ctx_ids, specs, report: GenerationReport, dedupe: bool = True) -> None:
+        """Một lượt: gọi LLM, kiểm từng câu, lưu vào `db` (chưa commit) và ghi vào `report`."""
         system, user = build_generate_prompt(chunk.heading, prompt_ctx, specs)
         try:
             data = self.llm.complete_json(system, user, temperature=0.4)
         except LLMError as e:
             report.errors.append(str(e))
+            report.rate_limited = isinstance(e, LLMRateLimited)
             return
+        # LLM có thể trả {"questions": [...]} hoặc trực tiếp một danh sách.
         items = data.get("questions") if isinstance(data, dict) else data
         if not isinstance(items, list):
             report.errors.append("LLM không trả về danh sách questions")
@@ -92,15 +121,21 @@ class GenerationService:
                 report.errors.append(f"item sai schema: {str(e)[:120]}")
                 continue
 
+            # Ba lớp lọc theo thứ tự rẻ -> đắt: luật (miễn phí) -> LLM kiểm định -> trùng lặp (cosine).
             reason = check_question(raw, context)
             fin = None
             if not reason:
                 fin = finalize(raw)
                 if self.s.validate_questions:
-                    ok, why = llm_validate(self.llm, context, fin)
+                    try:
+                        ok, why = llm_validate(self.llm, context, fin)
+                    except LLMRateLimited as e:
+                        report.errors.append(str(e))
+                        report.rate_limited = True
+                        break  # câu chưa kiểm định thì không lưu; các câu đã xử lý trước đó vẫn giữ
                     reason = None if ok else why
             if not reason and dedupe and self._is_duplicate(raw.question, existing):
-                reason = "trùng với câu hỏi đã có"
+                reason = DUPLICATE_REASON
 
             if reason or fin is None:
                 row = Question(
@@ -120,6 +155,7 @@ class GenerationService:
         db.flush()
 
     def _is_duplicate(self, text: str, existing: list[str]) -> bool:
+        """Trùng nếu cosine với câu đã có >= dedup_threshold (vector đã chuẩn hoá nên tích vô hướng = cosine)."""
         if not existing:
             return False
         vecs = self.embedder.embed([text, *existing])
@@ -134,4 +170,7 @@ class GenerationService:
             total.created += r.created
             total.rejected += r.rejected
             total.errors += r.errors
+            if r.rate_limited:
+                total.rate_limited = True
+                break
         return total

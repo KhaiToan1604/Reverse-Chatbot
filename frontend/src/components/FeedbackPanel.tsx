@@ -1,7 +1,9 @@
+// Phản hồi sau khi chấm: đúng / đúng một phần / chưa đúng, các ý còn thiếu, đáp án chuẩn, giải thích và trích dẫn nguồn.
 import type { AnswerResp } from "../types";
 import { fmtDue, Meter } from "./ui";
 
 export default function FeedbackPanel({ r, onNext }: { r: AnswerResp; onNext: () => void }) {
+  // "Đúng một phần" = chưa đạt ngưỡng nhưng có điểm (câu mở chấm theo rubric).
   const partial = !r.is_correct && r.score > 0;
   const verdict = r.is_correct ? "Đúng" : partial ? "Đúng một phần" : "Chưa đúng";
   const tone = r.is_correct ? "ok" : partial ? "partial" : "bad";

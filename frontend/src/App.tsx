@@ -1,3 +1,4 @@
+// Bảng định tuyến. `user` (người học hiện tại) được giữ ở đây và truyền xuống các trang cần dùng.
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useUser } from "./store";
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/quiz/:sid" element={<Quiz />} />
         <Route path="/summary/:sid" element={<Summary user={user} />} />
         <Route path="/progress" element={<Progress user={user} onMissingUser={() => setUser(null)} />} />
+        {/* Trang quản trị tự hỏi X-Admin-Key; bảo vệ thật nằm ở backend, không phải ở đây. */}
         <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

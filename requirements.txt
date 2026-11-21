@@ -8,7 +8,6 @@ numpy>=1.26
 python-multipart>=0.0.9
 pypdf>=4.0
 python-docx>=1.1
-pytest>=8.0
 
 # Tùy chọn (embedding thật, chạy local, miễn phí). Cài khi cần:
 # sentence-transformers>=3.0

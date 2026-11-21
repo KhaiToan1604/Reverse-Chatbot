@@ -1,3 +1,4 @@
+// Kiểu dữ liệu phản hồi của API; giữ khớp với backend (app/modules/quiz/service.py, app/api/routers/).
 export type QType = "mcq" | "fill_blank" | "short_answer" | "scenario";
 export type Level = "recall" | "apply";
 

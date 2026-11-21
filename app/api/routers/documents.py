@@ -1,3 +1,5 @@
+"""Router quản lý tài liệu (yêu cầu X-Admin-Key): nạp file/văn bản, liệt kê, xem chunk, xoá."""
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from app.db.models import Chunk, Document
 from app.modules.ingestion.loaders import SUPPORTED, UnsupportedFormat
 
 router = APIRouter(prefix="/documents", tags=["documents"], dependencies=[Depends(require_admin)])
+# Mã lỗi: 413 file quá lớn, 415 định dạng không hỗ trợ, 422 nội dung không dùng được.
 MAX_UPLOAD = 10 * 1024 * 1024
 
 

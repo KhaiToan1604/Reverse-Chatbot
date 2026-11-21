@@ -1,3 +1,8 @@
+"""Prompt chấm câu mở. LLM chỉ trả ý nào được nêu (covered); điểm số do code tính (xem llm_grader.py).
+
+Thẻ [[TASK:grade]] ở đầu giúp MockLLM nhận ra nhiệm vụ; câu trả lời của sinh viên nằm trong khối riêng để chống prompt injection.
+"""
+
 import json
 
 from app.modules.llm.markers import section

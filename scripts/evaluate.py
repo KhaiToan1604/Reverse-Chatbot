@@ -1,5 +1,6 @@
 """Chạy các phép đánh giá cho báo cáo.  Ví dụ:
     python -m scripts.evaluate report
+    python -m scripts.evaluate purge-duplicates   # xoá câu bị loại vì trùng (do chạy sinh lặp lại)
     python -m scripts.evaluate export-review reviews.csv --n 50
     python -m scripts.evaluate import-review reviews.csv
     python -m scripts.evaluate grader graded_answers.csv
@@ -19,12 +20,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("report")
-    p = sub.add_parser("export-review"); p.add_argument("path"); p.add_argument("--n", type=int, default=50)
-    p = sub.add_parser("import-review"); p.add_argument("path")
-    p = sub.add_parser("grader"); p.add_argument("path")
-    p = sub.add_parser("rag-vs-norag"); p.add_argument("--chunks", type=int, default=10)
+    sub.add_parser("purge-duplicates")
+    p = sub.add_parser("export-review")
+    p.add_argument("path")
+    p.add_argument("--n", type=int, default=50)
+    p = sub.add_parser("import-review")
+    p.add_argument("path")
+    p = sub.add_parser("grader")
+    p.add_argument("path")
+    p = sub.add_parser("rag-vs-norag")
+    p.add_argument("--chunks", type=int, default=10)
     args = ap.parse_args()
 
+    # Mỗi lệnh con ứng với một hàm trong app/modules/evaluation/runner.py; kết quả in ra dạng JSON để dán vào báo cáo.
     s = get_settings()
     init_engine(s.database_url)
     create_all()
@@ -32,6 +40,8 @@ def main() -> None:
     with session_scope() as db:
         if args.cmd == "report":
             out = runner.question_quality_report(db)
+        elif args.cmd == "purge-duplicates":
+            out = {"deleted_duplicate_rejects": runner.purge_duplicate_rejects(db)}
         elif args.cmd == "export-review":
             out = {"exported": runner.export_review_csv(db, args.path, args.n)}
         elif args.cmd == "import-review":

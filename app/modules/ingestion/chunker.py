@@ -7,12 +7,16 @@ theo dõi mức thành thạo (mastery) của người học.
 import re
 from dataclasses import dataclass
 
+# Heading Markdown: 1-6 dấu #, cho phép thụt tối đa 3 khoảng trắng và dấu # đóng ở cuối.
 HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
+# Điểm cắt giữa hai câu: sau dấu kết câu và khoảng trắng.
 SENT_RE = re.compile(r"(?<=[.!?…;])\s+")
 
 
 @dataclass
 class RawChunk:
+    """Chunk chưa lưu DB: `heading` là đường dẫn tiêu đề ("Cha > Con"), `text` là nội dung."""
+
     heading: str
     text: str
 
@@ -20,11 +24,12 @@ class RawChunk:
 def split_sections(text: str) -> list[tuple[str, str]]:
     """Tách theo heading Markdown. Heading con được nối: 'Cha > Con'."""
     sections: list[tuple[str, list[str]]] = []
+    # stack giữ chuỗi tiêu đề cha đang mở: gặp heading cấp N thì bỏ các tiêu đề cấp >= N rồi đẩy tiêu đề mới vào.
     stack: list[tuple[int, str]] = []
     current_heading = ""
     buf: list[str] = []
 
-    def flush() -> None:
+    def flush() -> None:  # chốt phần nội dung đang gom (buf) thành một section
         body = "\n".join(buf).strip()
         if body:
             sections.append((current_heading, [body]))
@@ -46,6 +51,7 @@ def split_sections(text: str) -> list[tuple[str, str]]:
 
 
 def _split_long(paragraph: str, max_chars: int) -> list[str]:
+    """Cắt đoạn dài hơn max_chars theo ranh giới câu; câu quá dài thì cắt cứng ở khoảng trắng gần nhất."""
     if len(paragraph) <= max_chars:
         return [paragraph]
     out: list[str] = []
@@ -70,6 +76,7 @@ def _split_long(paragraph: str, max_chars: int) -> list[str]:
 
 
 def _tail(text: str, n: int) -> str:
+    """Lấy ~n ký tự cuối (bắt đầu ở ranh giới từ) để làm phần chồng lấn sang chunk kế tiếp."""
     if n <= 0 or len(text) <= n:
         return "" if n <= 0 else text
     t = text[-n:]
@@ -78,6 +85,7 @@ def _tail(text: str, n: int) -> str:
 
 
 def chunk_text(text: str, max_chars: int = 800, overlap: int = 100, min_chars: int = 80) -> list[RawChunk]:
+    """Hàm chính: tách theo heading, gom các đoạn đến max_chars, chồng lấn `overlap` ký tự giữa chunk liền kề."""
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)  # chú thích ẩn không phải tri thức
     chunks: list[RawChunk] = []
     for heading, body in split_sections(text):
@@ -87,6 +95,7 @@ def chunk_text(text: str, max_chars: int = 800, overlap: int = 100, min_chars: i
         for p in paragraphs:
             units.extend(_split_long(re.sub(r"[ \t]+\n", "\n", p), max_chars))
 
+        # Gom dần các đơn vị vào chunk; vượt max_chars thì chốt chunk và mang phần đuôi sang chunk mới (overlap).
         section_chunks: list[str] = []
         cur = ""
         for u in units:
@@ -102,5 +111,6 @@ def chunk_text(text: str, max_chars: int = 800, overlap: int = 100, min_chars: i
         # gộp chunk cuối quá ngắn vào chunk trước (cùng section)
         if len(section_chunks) > 1 and len(section_chunks[-1]) < min_chars:
             section_chunks[-2] = f"{section_chunks[-2]}\n\n{section_chunks.pop()}"
+        # bỏ chunk gần như rỗng (< min(min_chars, 20) ký tự)
         chunks.extend(RawChunk(heading, c) for c in section_chunks if len(c.strip()) >= min(min_chars, 20))
     return chunks

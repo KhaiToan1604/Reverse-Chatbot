@@ -12,6 +12,8 @@ import numpy as np
 
 
 class NumpyVectorStore:
+    """`_ids[i]` là id chunk của hàng `_mat[i]`. Có khoá luồng vì FastAPI xử lý request ở nhiều thread."""
+
     def __init__(self, path: str | None = None):
         self._path = Path(path) if path else None
         self._lock = threading.Lock()
@@ -70,6 +72,7 @@ class NumpyVectorStore:
         with self._lock:
             if self._mat is None or not self._ids:
                 return []
+            # vector đã chuẩn hoá nên tích vô hướng = cosine; sắp xếp giảm dần rồi lọc theo allowed/exclude
             scores = self._mat @ query.astype(np.float32).reshape(-1)
             order = np.argsort(-scores)
             out: list[tuple[int, float]] = []

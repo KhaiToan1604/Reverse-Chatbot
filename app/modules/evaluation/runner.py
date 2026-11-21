@@ -10,19 +10,23 @@ import csv
 import json
 import random
 from collections import Counter
-from pathlib import Path
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Chunk, Question
 from app.modules.generation.schemas import Spec, default_specs
-from app.modules.generation.service import GenerationService
+from app.modules.generation.service import DUPLICATE_REASON, GenerationService
 from app.modules.grading.service import GradingService
 
 
 def question_quality_report(db: Session) -> dict:
+    """Tỉ lệ qua kiểm tra tự động. Câu bị loại vì TRÙNG (thường do chạy sinh lặp lại) không tính là lỗi chất lượng:
+    chúng được báo riêng và loại khỏi mẫu số của auto_pass_rate."""
     total = db.scalar(select(func.count()).select_from(Question)) or 0
+    dup = db.scalar(
+        select(func.count()).select_from(Question).where(Question.status == "rejected", Question.reject_reason == DUPLICATE_REASON)
+    ) or 0
     valid = db.scalar(select(func.count()).select_from(Question).where(Question.status == "valid")) or 0
     reasons = Counter(
         (r or "").split(":")[0][:80] for r in db.scalars(select(Question.reject_reason).where(Question.status == "rejected"))
@@ -36,11 +40,20 @@ def question_quality_report(db: Session) -> dict:
     return {
         "generated_total": total,
         "valid": valid,
-        "rejected": total - valid,
-        "auto_pass_rate": round(valid / total, 4) if total else None,
+        "rejected": total - valid,  # gồm cả câu trùng; xem duplicate_rejected
+        "duplicate_rejected": dup,
+        "evaluated": total - dup,  # số câu thực sự được đánh giá chất lượng (không tính câu trùng)
+        "auto_pass_rate": round(valid / (total - dup), 4) if total - dup else None,
         "valid_by_type_level": by_type,
         "reject_reasons": dict(reasons.most_common()),
     }
+
+
+def purge_duplicate_rejects(db: Session) -> int:
+    """Xoá các bản ghi câu bị loại vì trùng (không có giá trị phân tích, chỉ làm sai số liệu). Trả về số bản ghi đã xoá."""
+    res = db.execute(delete(Question).where(Question.status == "rejected", Question.reject_reason == DUPLICATE_REASON))
+    db.commit()
+    return res.rowcount or 0
 
 
 # ---- duyệt thủ công -----------------------------------------------------------------------
@@ -58,7 +71,8 @@ def export_review_csv(db: Session, path: str, n: int = 50, seed: int = 0) -> int
 
 
 def import_review_labels(path: str) -> dict:
-    rows = [r for r in csv.DictReader(open(path, encoding="utf-8-sig")) if (r.get("human_ok(1/0)") or "").strip() in ("0", "1")]
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        rows = [r for r in csv.DictReader(f) if (r.get("human_ok(1/0)") or "").strip() in ("0", "1")]
     if not rows:
         return {"labeled": 0}
     ok = sum(r["human_ok(1/0)"].strip() == "1" for r in rows)
@@ -77,7 +91,7 @@ def cohen_kappa(a: list[bool], b: list[bool]) -> float:
     n = len(a)
     if n == 0:
         return float("nan")
-    po = sum(x == y for x, y in zip(a, b)) / n
+    po = sum(x == y for x, y in zip(a, b, strict=True)) / n
     pa, pb = sum(a) / n, sum(b) / n
     pe = pa * pb + (1 - pa) * (1 - pb)
     return 1.0 if pe == 1 else (po - pe) / (1 - pe)
@@ -86,12 +100,13 @@ def cohen_kappa(a: list[bool], b: list[bool]) -> float:
 def grader_agreement(db: Session, grader: GradingService, path: str, threshold: float) -> dict:
     """CSV cần cột: question_id, answer, human_score (0..1)."""
     sys_scores, human_scores = [], []
-    for r in csv.DictReader(open(path, encoding="utf-8-sig")):
-        q = db.get(Question, int(r["question_id"]))
-        if not q:
-            continue
-        sys_scores.append(grader.grade(q, r["answer"]).score)
-        human_scores.append(float(r["human_score"]))
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for r in csv.DictReader(f):
+            q = db.get(Question, int(r["question_id"]))
+            if not q:
+                continue
+            sys_scores.append(grader.grade(q, r["answer"]).score)
+            human_scores.append(float(r["human_score"]))
     n = len(sys_scores)
     if not n:
         return {"n": 0}
@@ -99,8 +114,8 @@ def grader_agreement(db: Session, grader: GradingService, path: str, threshold: 
     hp = [h >= threshold for h in human_scores]
     return {
         "n": n,
-        "mae": round(sum(abs(s - h) for s, h in zip(sys_scores, human_scores)) / n, 4),
-        "pass_fail_accuracy": round(sum(x == y for x, y in zip(sp, hp)) / n, 4),
+        "mae": round(sum(abs(s - h) for s, h in zip(sys_scores, human_scores, strict=True)) / n, 4),
+        "pass_fail_accuracy": round(sum(x == y for x, y in zip(sp, hp, strict=True)) / n, 4),
         "cohen_kappa": round(cohen_kappa(sp, hp), 4),
     }
 

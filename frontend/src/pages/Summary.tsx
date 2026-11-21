@@ -1,3 +1,4 @@
+// Tổng kết một phiên: số câu đúng, điểm trung bình, chủ đề yếu và chi tiết từng câu đã trả lời.
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { Busy, ErrorNote, levelLabel, typeLabel, useLoad } from "../components/ui";

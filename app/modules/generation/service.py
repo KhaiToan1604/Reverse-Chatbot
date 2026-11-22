@@ -15,7 +15,7 @@ from app.config import Settings
 from app.db.models import Chunk, Question
 from app.modules.embedding.base import Embedder
 from app.modules.generation.prompts import build_generate_prompt
-from app.modules.generation.rules import check_question, finalize
+from app.modules.generation.rules import check_question, ensure_rubric, finalize
 from app.modules.generation.schemas import RawQuestion, Spec, default_specs
 from app.modules.generation.validator import llm_validate_batch
 from app.modules.ingestion.service import chunk_embedding_text
@@ -122,6 +122,7 @@ class GenerationService:
             except Exception as e:  # pydantic ValidationError, item không phải dict...
                 report.errors.append(f"item sai schema: {str(e)[:120]}")
                 continue
+            ensure_rubric(raw)
             reason = check_question(raw, context, self.s.reject_unverified_numbers)
             parsed.append((raw, reason, None if reason else finalize(raw)))
 

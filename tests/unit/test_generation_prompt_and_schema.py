@@ -28,3 +28,30 @@ def test_options_dict_is_coerced_to_list():
 @pytest.mark.parametrize(("raw", "expected"), [("B", 1), ("B)", 1), ("2", 2), (3, 3)])
 def test_correct_index_is_coerced(raw, expected):
     assert _raw(correct_index=raw).correct_index == expected
+
+
+def test_scenario_example_shows_a_multi_point_rubric_and_matches_its_quote():
+    """Mẫu scenario phải minh hoạ rubric >= 2 ý và có đáp án nằm trong trích dẫn của chính mẫu (model hay sao chép mẫu)."""
+    from app.modules.generation.prompts import _example
+
+    ex = _example("scenario", "apply")
+    assert len(ex["rubric"]) >= 2 and abs(sum(r["weight"] for r in ex["rubric"]) - 1) < 1e-9
+    assert ex["source_quote"] and "15 phút" in ex["source_quote"] and "15 phút" in ex["explanation"]
+    assert ex["options"] is None and ex["correct_index"] is None
+
+
+def test_format_section_mentions_rubric_rule_only_for_open_questions():
+    from app.modules.generation.prompts import _format_section
+    from app.modules.generation.schemas import Spec
+
+    assert "KHÔNG được null" in _format_section([Spec("scenario", "apply")])
+    assert "KHÔNG được null" in _format_section([Spec("short_answer", "apply")])
+    assert "LƯU Ý tự luận" not in _format_section([Spec("mcq", "recall")])
+
+
+def test_prompt_asks_for_calculation_expression_before_the_answer():
+    from app.modules.generation.prompts import SYSTEM_GENERATE, _example
+
+    assert '"calculation"' in SYSTEM_GENERATE and "MỌI con số nêu trong câu hỏi" in SYSTEM_GENERATE
+    keys = list(_example("mcq", "recall"))
+    assert keys.index("explanation") < keys.index("calculation") < keys.index("answer")  # tính trước khi chốt đáp án

@@ -67,7 +67,7 @@ python -m ruff check app scripts tests               # lint
 # hoặc: make ci
 ```
 
-### Dùng LLM thật (ngân sách ~0đ)
+### Dùng LLM thật
 
 `.env` — Gemini free tier:
 ```bash
@@ -122,7 +122,7 @@ python -m scripts.evaluate export-review reviews.csv --n 50   # người duyệt
 python -m scripts.evaluate import-review reviews.csv
 python -m scripts.evaluate grader graded.csv                  # cột: question_id, answer, human_score
 python -m scripts.evaluate rag-vs-norag --chunks 10
-python -m scripts.inspect_questions --qtype mcq --limit 3
+python -m scripts.inspect_questions --limit 10
 ```
 Số liệu chỉ có ý nghĩa khi chạy với LLM thật; với `mock` chỉ để kiểm tra luồng chạy.
 

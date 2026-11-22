@@ -1,10 +1,12 @@
 """Kiểm tra bằng luật (rẻ, không tốn LLM) + chuẩn hoá câu hỏi trước khi lưu."""
 
+import ast
 import random
 import re
+from fractions import Fraction
 
 from app.common.text import norm_text
-from app.modules.generation.schemas import LEVELS, QTYPES, RawQuestion
+from app.modules.generation.schemas import LEVELS, QTYPES, RawQuestion, RubricItem
 
 # Chỗ trống hợp lệ trong câu điền khuyết: ___ (>=3 gạch dưới), .... hoặc ……
 BLANK_RE = re.compile(r"_{3,}|\.{4,}|…{2,}")
@@ -25,6 +27,16 @@ def grounded(quote: str, context: str, min_tokens: int = 4) -> bool:
     return sum(t in cset for t in qt) / len(qt) >= 0.92
 
 
+def ensure_rubric(q: RawQuestion) -> None:
+    """short_answer mà LLM không đưa rubric: dùng chính đáp án chuẩn làm một ý duy nhất (trọng số 1).
+
+    Câu hỏi một thông tin ("Cần kết nối qua đâu?") chỉ có một ý để chấm; ép model bịa thêm ý thứ hai làm loại oan câu đúng.
+    Chỉ áp dụng cho short_answer: scenario là tình huống nhiều bước nên vẫn bắt buộc có ít nhất 2 ý.
+    """
+    if q.qtype == "short_answer" and not q.rubric and q.answer.strip():
+        q.rubric = [RubricItem(point=q.answer.strip(), weight=1.0)]
+
+
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
 
 
@@ -36,6 +48,73 @@ def _numbers(text: str) -> set[str]:
 def unverified_numbers(answer: str, context: str, question: str) -> set[str]:
     """Số có trong đáp án nhưng không có trong tài liệu lẫn câu hỏi => nhiều khả năng là kết quả tự tính của LLM."""
     return _numbers(answer) - _numbers(context) - _numbers(question)
+
+
+_MAX_CALC_LEN = 100
+_MAX_CALC_NODES = 40
+
+
+def eval_calculation(expr: str) -> tuple[int, set[str]] | None:
+    """Tính lại biểu thức số học của LLM một cách an toàn. Trả về (kết quả nguyên, tập các toán hạng) hoặc None nếu không hợp lệ.
+
+    Chỉ cho phép số nguyên, + - * / và ngoặc (không luỹ thừa, không tên hàm, không biến) nên không thể thực thi mã tuỳ ý.
+    Tính bằng Fraction để phép chia chính xác; kết quả phải là số nguyên dương.
+    """
+    text = expr.split("=")[0].replace("×", "*").replace("÷", "/").replace(" ", "")
+    if not text or len(text) > _MAX_CALC_LEN:
+        return None
+    try:
+        tree = ast.parse(text, mode="eval")
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return None
+    if sum(1 for _ in ast.walk(tree)) > _MAX_CALC_NODES:
+        return None
+    operands: set[str] = set()
+
+    def ev(node: ast.AST) -> Fraction:
+        if isinstance(node, ast.Expression):
+            return ev(node.body)
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            operands.add(str(node.value))
+            return Fraction(node.value)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd | ast.USub):
+            v = ev(node.operand)
+            return -v if isinstance(node.op, ast.USub) else v
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add | ast.Sub | ast.Mult | ast.Div):
+            a, b = ev(node.left), ev(node.right)
+            if isinstance(node.op, ast.Add):
+                return a + b
+            if isinstance(node.op, ast.Sub):
+                return a - b
+            if isinstance(node.op, ast.Mult):
+                return a * b
+            if b == 0:
+                raise ZeroDivisionError
+            return a / b
+        raise ValueError("biểu thức không được phép")
+
+    try:
+        value = ev(tree)
+    except (ValueError, ZeroDivisionError, RecursionError):
+        return None
+    if value.denominator != 1 or value <= 0:
+        return None
+    return int(value), operands
+
+
+def calculation_supports(calc: str | None, extra: set[str], context: str, question: str) -> bool:
+    """Đáp án chứa số tự tính `extra` được chấp nhận khi biểu thức của LLM, do code tính lại, chứng minh đúng số đó.
+
+    Điều kiện: (1) kết quả đúng bằng số duy nhất chưa kiểm chứng trong đáp án; (2) mọi toán hạng đều lấy từ tài liệu hoặc câu hỏi;
+    (3) mọi con số nêu trong câu hỏi đều được dùng làm toán hạng. Điều kiện (3) chặn lỗi hay gặp của model nhỏ là quên một đại lượng
+    (ví dụ chỉ tính 10 ngày x 2.000 mà bỏ số cuốn sách nêu trong câu hỏi): câu như vậy bị loại thay vì cho đáp án sai qua.
+    """
+    res = eval_calculation(calc) if calc else None
+    if res is None:
+        return False
+    value, operands = res
+    allowed = _numbers(context) | _numbers(question)
+    return extra == {str(value)} and operands <= allowed and _numbers(question) <= operands
 
 
 def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool = True) -> str | None:
@@ -72,8 +151,9 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
     else:  # short_answer | scenario
         if not q.answer.strip():
             return "thiếu đáp án chuẩn"
-        if not q.rubric or len(q.rubric) < 2:
-            return "tự luận cần rubric ít nhất 2 ý"
+        min_points = 2 if q.qtype == "scenario" else 1  # scenario: tình huống nhiều bước; short_answer: có thể chỉ một ý
+        if not q.rubric or len(q.rubric) < min_points:
+            return f"tự luận cần rubric ít nhất {min_points} ý"
         if any(not r.point.strip() for r in q.rubric):
             return "rubric có ý rỗng"
 
@@ -81,8 +161,19 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
         # mcq: chỉ xét lựa chọn đúng (các lựa chọn nhiễu được phép có số bất kỳ).
         answer = OPTION_PREFIX_RE.sub("", q.options[q.correct_index]).strip() if q.qtype == "mcq" and q.options else q.answer  # type: ignore[index]
         extra = unverified_numbers(answer, context, q.question)
+        computed: set[str] = set()
         if extra:
-            return f"đáp án chứa số không có trong tài liệu ({', '.join(sorted(extra))}): có thể là kết quả tính toán chưa kiểm chứng"
+            if not calculation_supports(q.calculation, extra, context, q.question):
+                hint = "; phép tính kèm theo không chứng minh được đáp án" if q.calculation else ""
+                return (f"đáp án chứa số không có trong tài liệu ({', '.join(sorted(extra))}): "
+                        f"có thể là kết quả tính toán chưa kiểm chứng{hint}")
+            computed = extra  # số này đã được chứng minh bằng phép tính
+        # Căn cứ phải nâng đỡ được đáp án: số trong đáp án phải nằm trong source_quote (hoặc câu hỏi / kết quả phép tính). Nếu không,
+        # trích dẫn chỉ "có trong tài liệu" chứ không chứng minh gì (ví dụ đáp án dùng giới hạn 50 trang nhưng trích dẫn nói về VPN).
+        unsupported = _numbers(answer) - _numbers(q.source_quote) - _numbers(q.question) - computed
+        if unsupported:
+            return (f"số trong đáp án ({', '.join(sorted(unsupported))}) không nằm trong source_quote: "
+                    "trích dẫn không đủ làm căn cứ cho đáp án")
     return None
 
 
@@ -107,6 +198,8 @@ def finalize(q: RawQuestion) -> dict:
         out["answer"] = "ABCD"[opts.index(correct_text)]
     else:
         out["answer"] = q.answer.strip()
+    if q.calculation:
+        out["meta"]["calculation"] = q.calculation.strip()
     if q.qtype == "fill_blank":
         out["meta"]["alt_answers"] = [a.strip() for a in q.alt_answers if a.strip()]
     if q.qtype in ("short_answer", "scenario") and q.rubric:

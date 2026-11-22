@@ -50,6 +50,13 @@ class RawQuestion(BaseModel):
     rubric: list[RubricItem] | None = None
     explanation: str = ""
     source_quote: str = ""
+    # Biểu thức số học (ví dụ "3*10*2000") khi đáp án là kết quả tính toán; code tự tính lại để kiểm chứng.
+    calculation: str | None = None
+
+    @field_validator("calculation", mode="before")
+    @classmethod
+    def _coerce_calculation(cls, v):
+        return v.strip() or None if isinstance(v, str) else None
 
     # Hai validator dưới đây "dung thứ" output hơi lệch của LLM (rubric là list chuỗi, alt_answers là một chuỗi).
     @field_validator("rubric", mode="before")

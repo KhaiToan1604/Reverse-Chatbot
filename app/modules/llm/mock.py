@@ -33,7 +33,9 @@ class MockLLM(LLMProvider):
         if "[[TASK:generate]]" in system:
             return json.dumps(self._generate(user), ensure_ascii=False)
         if "[[TASK:validate]]" in system:
-            return json.dumps({"answerable": True, "answer_correct": True, "unambiguous": True, "reason": "mock"})
+            n = len(json.loads(get_section(user, "QUESTIONS") or "[]"))
+            ok = {"answerable": True, "answer_correct": True, "unambiguous": True, "reason": "mock"}
+            return json.dumps({"results": [{"index": i, **ok} for i in range(n)]})
         if "[[TASK:grade]]" in system:
             return json.dumps(self._grade(user), ensure_ascii=False)
         return "{}"

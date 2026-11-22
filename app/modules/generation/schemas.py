@@ -62,6 +62,23 @@ class RawQuestion(BaseModel):
             out.append({"point": item} if isinstance(item, str) else item)
         return out
 
+    @field_validator("options", mode="before")
+    @classmethod
+    def _coerce_options(cls, v):
+        # LLM đôi khi trả {"A": "...", "B": "..."} thay vì danh sách.
+        return list(v.values()) if isinstance(v, dict) else v
+
+    @field_validator("correct_index", mode="before")
+    @classmethod
+    def _coerce_index(cls, v):
+        # Chấp nhận chữ cái ("B", "b)") hoặc số dạng chuỗi ("1") thay vì số nguyên 0-3.
+        if isinstance(v, str):
+            t = v.strip()
+            if t[:1].upper() in "ABCD" and (len(t) == 1 or not t[1].isalnum()):
+                return "ABCD".index(t[0].upper())
+            return int(t) if t.isdigit() else None
+        return v
+
     @field_validator("alt_answers", mode="before")
     @classmethod
     def _coerce_alt(cls, v):

@@ -1,4 +1,4 @@
-# Reverse Chatbot — Backend + Frontend
+# Reverse Chatbot
 
 Hệ thống đảo chiều chatbot: từ tri thức đã nạp (RAG), **hệ thống đặt câu hỏi cho người học**, chấm câu trả lời,
 và chọn câu tiếp theo theo mức thành thạo. Ứng dụng thử nghiệm: Thư viện ĐHBK.
@@ -37,10 +37,10 @@ Lắp ráp ở `app/container.py`; API ở `app/api/routers/`.
 ## Chạy cả hệ thống (một lệnh phục vụ cả giao diện)
 
 ```bash
-cd frontend  
-npm install 
+cd frontend
+npm install
 npm run build                           # tạo frontend/dist
-cd..    
+cd ..
 python -m uvicorn app.main:app           # mở http://localhost:8000
 ```
 Nếu `frontend/dist` tồn tại, backend phục vụ giao diện ở `/` (đường dẫn `frontend_dist`, chạy từ thư mục gốc dự án);
@@ -77,24 +77,25 @@ LLM_API_KEY=<key từ Google AI Studio>
 ```
 Groq: 
 ```bash
-`LLM_PROVIDER=openai_compat`
-`LLM_BASE_URL=https://api.groq.com/openai/v1`
-`LLM_MODEL=<model>`
-`LLM_API_KEY=<key>`
+LLM_PROVIDER=openai_compat
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=<model>
+LLM_API_KEY=<key>
 ```
 Ollama local: 
 ```bash
-`LLM_BASE_URL=http://localhost:11434/v1`
-`LLM_MODEL=qwen2.5:7b`
+LLM_PROVIDER=openai_compat
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen2.5:7b
 ```
-bỏ trống key.
+Để trống `LLM_API_KEY`.
 
 Tên model và hạn mức free tier thay đổi theo thời gian — kiểm tra trên trang của nhà cung cấp.
 
 Embedding thật: 
 ```bash
-`pip install sentence-transformers`
-`EMBEDDING_PROVIDER=sentence_transformers`
+pip install sentence-transformers
+EMBEDDING_PROVIDER=sentence_transformers
 ```
 **Đổi embedding model thì phải xoá `data/` và ingest lại** (số chiều vector khác nhau).
 
@@ -121,6 +122,7 @@ python -m scripts.evaluate export-review reviews.csv --n 50   # người duyệt
 python -m scripts.evaluate import-review reviews.csv
 python -m scripts.evaluate grader graded.csv                  # cột: question_id, answer, human_score
 python -m scripts.evaluate rag-vs-norag --chunks 10
+python -m scripts.inspect_questions --qtype mcq --limit 3
 ```
 Số liệu chỉ có ý nghĩa khi chạy với LLM thật; với `mock` chỉ để kiểm tra luồng chạy.
 

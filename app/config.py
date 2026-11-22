@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     # Generation: có kiểm định bằng LLM không; ngưỡng cosine coi là câu trùng; số chunk lân cận làm ngữ cảnh;
     # có sinh thêm câu hỏi ngay khi người học hết câu trong ngân hàng không.
     validate_questions: bool = True
+    # Loại câu có đáp án chứa số tự tính (không có trong tài liệu): model nhỏ hay sai phép tính. Xem rules.check_question.
+    reject_unverified_numbers: bool = True
     dedup_threshold: float = 0.92
     retrieval_top_k: int = 2
     generate_on_demand: bool = True

@@ -17,7 +17,7 @@ from app.modules.embedding.base import Embedder
 from app.modules.generation.prompts import build_generate_prompt
 from app.modules.generation.rules import check_question, finalize
 from app.modules.generation.schemas import RawQuestion, Spec, default_specs
-from app.modules.generation.validator import llm_validate
+from app.modules.generation.validator import llm_validate_batch
 from app.modules.ingestion.service import chunk_embedding_text
 from app.modules.llm.base import LLMError, LLMProvider, LLMRateLimited
 from app.modules.vectorstore.numpy_store import NumpyVectorStore
@@ -114,26 +114,35 @@ class GenerationService:
             [q.question for q in db.scalars(select(Question).where(Question.chunk_id == chunk.id, Question.status == "valid"))]
             if dedupe else []
         )
+        # Bước 1: parse + kiểm bằng luật (miễn phí) cho cả lô. `pending` = câu qua luật, chờ LLM kiểm định.
+        parsed: list[tuple[RawQuestion, str | None, dict | None]] = []  # (câu thô, lý do loại, bản đã chuẩn hoá)
         for item in items:
             try:
                 raw = RawQuestion.model_validate(item)
             except Exception as e:  # pydantic ValidationError, item không phải dict...
                 report.errors.append(f"item sai schema: {str(e)[:120]}")
                 continue
+            reason = check_question(raw, context, self.s.reject_unverified_numbers)
+            parsed.append((raw, reason, None if reason else finalize(raw)))
 
-            # Ba lớp lọc theo thứ tự rẻ -> đắt: luật (miễn phí) -> LLM kiểm định -> trùng lặp (cosine).
-            reason = check_question(raw, context)
-            fin = None
-            if not reason:
-                fin = finalize(raw)
-                if self.s.validate_questions:
-                    try:
-                        ok, why = llm_validate(self.llm, context, fin)
-                    except LLMRateLimited as e:
-                        report.errors.append(str(e))
-                        report.rate_limited = True
-                        break  # câu chưa kiểm định thì không lưu; các câu đã xử lý trước đó vẫn giữ
-                    reason = None if ok else why
+        # Bước 2: MỘT lần gọi LLM kiểm định cho cả lô (thay vì mỗi câu một lần).
+        verdict: dict[int, tuple[bool, str]] = {}
+        pending = [i for i, (_, reason, _) in enumerate(parsed) if not reason]
+        if pending and self.s.validate_questions:
+            try:
+                res = llm_validate_batch(self.llm, context, [parsed[i][2] for i in pending])  # type: ignore[misc]
+            except LLMRateLimited as e:
+                report.errors.append(str(e))
+                report.rate_limited = True
+                db.flush()
+                return  # chưa kiểm định thì không lưu câu nào của lô này; lô trước đó vẫn được giữ
+            verdict = dict(zip(pending, res, strict=True))
+
+        # Bước 3: loại trùng (cosine, cục bộ) rồi lưu: câu đạt -> valid, còn lại -> rejected kèm lý do.
+        for i, (raw, reason, fin) in enumerate(parsed):
+            if not reason and i in verdict:
+                ok, why = verdict[i]
+                reason = None if ok else why
             if not reason and dedupe and self._is_duplicate(raw.question, existing):
                 reason = DUPLICATE_REASON
 

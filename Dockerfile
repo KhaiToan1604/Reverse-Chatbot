@@ -1,7 +1,7 @@
 # Image hai tầng: tầng 1 build giao diện React, tầng 2 chỉ chứa Python + file đã build (nhẹ, không có Node).
 
 # --- Tầng 1: build giao diện ---
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /web
 # Chép package*.json trước để Docker cache được bước `npm ci` khi mã nguồn đổi mà phụ thuộc không đổi.
 COPY frontend/package*.json ./

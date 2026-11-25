@@ -20,7 +20,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check app scripts tests
       - run: pytest tests/unit tests/integration --cov --cov-report=xml --cov-report=term-missing
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.python == '3.12'
         with: { name: coverage, path: coverage.xml }
 
@@ -34,7 +34,7 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: frontend-dist, path: frontend/dist }
 
   # Job 3: chạy server thật + trình duyệt Chromium trên bản giao diện đã build ở job 2.

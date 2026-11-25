@@ -1,4 +1,9 @@
-"""Mô hình người học: mức nắm vững (EMA) và lịch ôn lại (Leitner đơn giản). Hai hàm thuần, dễ kiểm thử."""
+"""Mô hình người học: mức nắm vững (EMA) và lịch ôn lại (Leitner đơn giản).
+
+Chỉ có hai hàm đơn giản, không đụng DB hay mạng; gọi từ modules/quiz/service.py sau mỗi lần chấm điểm.
+Muốn đổi cách tính (vd. dùng mô hình quên Ebbinghaus): sửa `apply_attempt`; các tham số nằm ở app/config.py
+(MASTERY_ALPHA, REVIEW_INTERVALS_HOURS, APPLY_LEVEL_MASTERY, PASS_THRESHOLD).
+"""
 
 from datetime import datetime, timedelta
 
@@ -13,7 +18,9 @@ def apply_attempt(m: Mastery, score: float, now: datetime, s: Settings) -> Maste
     - streak + khoảng ôn: kiểu Leitner đơn giản; sai thì streak về 0 và cần ôn lại ngay.
     """
     correct = score >= s.pass_threshold
+    # EMA: mastery_mới = mastery_cũ + alpha * (điểm - mastery_cũ). Mastery bắt đầu từ 0 khi chưa có bản ghi.
     m.mastery = round((m.mastery or 0.0) + s.mastery_alpha * (score - (m.mastery or 0.0)), 4)
+    # streak = số lần đạt liên tiếp; sai một lần là về 0.
     m.streak = (m.streak or 0) + 1 if correct else 0
     m.correct_count = (m.correct_count or 0) + (1 if correct else 0)
     m.wrong_count = (m.wrong_count or 0) + (0 if correct else 1)

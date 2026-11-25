@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def _payload(q: dict) -> dict:
+    """Phần của câu hỏi gửi cho LLM kiểm định (không gửi source_quote/giải thích để LLM tự giải độc lập)."""
     return {
         "qtype": q["qtype"],
         "question": q["question"],
@@ -23,6 +24,7 @@ def _payload(q: dict) -> dict:
     }
 
 
+# Ba tiêu chí LLM kiểm định phải cùng true (tên khoá trùng với SYSTEM_VALIDATE trong prompts.py; đổi thì đổi cả hai).
 _KEYS = ("answerable", "answer_correct", "unambiguous")
 
 
@@ -67,6 +69,7 @@ def llm_validate_batch(llm: LLMProvider, context: str, qs: list[dict], _split: b
     """
     if not qs:
         return []
+    # Phân biệt ba kiểu lỗi: hết hạn mức (ném lên để dừng chạy), lỗi LLM thường (loại cả lô, an toàn), sai định dạng (thử từng câu).
     system, user = build_validate_prompt(context, [_payload(q) for q in qs])
     try:
         res = llm.complete_json(system, user, temperature=0.0)

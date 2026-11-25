@@ -37,10 +37,14 @@ class IngestionService:
         self.store = store
 
     def ingest_bytes(self, db: Session, filename: str, data: bytes, title: str | None = None) -> IngestResult:
+        """Nạp từ nội dung tệp: đọc theo đuôi file rồi gọi `ingest_text`. `title` mặc định là tên file bỏ đuôi."""
         text = load_text(filename, data)
         return self.ingest_text(db, text, title or filename.rsplit(".", 1)[0], source=filename)
 
     def ingest_text(self, db: Session, text: str, title: str, source: str = "") -> IngestResult:
+        """Chia chunk, nhúng vector và lưu. Nội dung giống hệt đã nạp (so băm SHA-256) thì trả bản cũ, không tạo thêm.
+
+        Ném ValueError nếu văn bản không tạo được chunk nào."""
         content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
         existing = db.scalar(select(Document).where(Document.content_hash == content_hash))
         if existing:  # idempotent: ingest cùng nội dung hai lần không tạo trùng

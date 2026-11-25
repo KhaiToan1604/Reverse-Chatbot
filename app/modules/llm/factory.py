@@ -1,8 +1,16 @@
+"""Chọn nhà cung cấp LLM theo cấu hình (LLM_PROVIDER). Được container.py gọi một lần khi khởi động."""
+
 from app.config import Settings
 from app.modules.llm.base import LLMError, LLMProvider
 
 
 def build_llm(s: Settings) -> LLMProvider:
+    """Tạo nhà cung cấp LLM từ `Settings`.
+
+    Thêm nhà cung cấp mới: viết lớp kế thừa LLMProvider, thêm một nhánh `if` ở đây, và thêm giá trị mới vào
+    `llm_provider` (kiểu Literal) trong app/config.py. Ném LLMError nếu loại không được hỗ trợ.
+    """
+    # Import nằm trong từng nhánh để chỉ nạp mã của nhà cung cấp đang dùng.
     if s.llm_provider == "mock":
         from app.modules.llm.mock import MockLLM
 

@@ -1,6 +1,10 @@
 """Điểm vào của ứng dụng: tạo FastAPI, gắn router, xử lý lỗi và phục vụ giao diện web.
 
-Chạy: `uvicorn app.main:app`. Test dùng `create_app(settings)` để tự truyền cấu hình riêng.
+Chạy: `uvicorn app.main:app` (xem README). Có thể gọi `create_app(settings, container)` để truyền cấu hình
+hoặc bộ module riêng (ví dụ LLM giả) thay cho mặc định đọc từ .env.
+
+Muốn thêm nhóm endpoint mới: tạo file router trong app/api/routers/, rồi thêm vào bộ router ở vòng lặp
+`include_router` bên dưới. Muốn thêm kiểu lỗi nghiệp vụ mới: kế thừa AppError (app/common/errors.py).
 """
 
 import logging
@@ -23,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
-    """Dựng ứng dụng. `settings`/`container` tuỳ chọn để test thay LLM, DB bằng bản giả."""
+    """Dựng ứng dụng. `settings`/`container` tuỳ chọn để thay cấu hình hoặc các module (LLM, embedding...) bằng bản khác."""
     settings = settings or get_settings()
 
     # Vòng đời: mở DB + lắp ráp module khi khởi động; đóng kết nối DB khi tắt.
@@ -37,6 +41,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         finally:
             dispose_engine()
 
+    # `lifespan` chạy một lần khi server bật/tắt; container được gắn vào app.state để router lấy qua deps.get_container.
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
     # CORS chỉ cần khi chạy frontend riêng (npm run dev); khi backend phục vụ dist thì cùng origin.
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
@@ -60,4 +65,5 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     return app
 
 
+# Biến `app` ở mức module chính là thứ uvicorn nạp (`app.main:app`); nó được dựng ngay khi module được import.
 app = create_app() if __name__ != "__main__" else None  # uvicorn app.main:app

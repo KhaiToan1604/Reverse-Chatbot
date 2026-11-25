@@ -1,4 +1,4 @@
-"""Các bảng CSDL. Quan hệ chính:
+"""Các bảng CSDL (7 bảng). Thêm cột: khai báo `Mapped[...]` vào lớp tương ứng, xem chú ý ở db/base.py::create_all. Quan hệ chính:
 
 Document 1-n Chunk 1-n Question;  User 1-n QuizSession 1-n Attempt (mỗi lần trả lời một câu);
 Mastery là (User, Chunk) -> mức nắm vững + lịch ôn.

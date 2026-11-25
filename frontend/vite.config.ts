@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 const target = process.env.BACKEND_URL ?? "http://localhost:8000";
 const apiPaths = ["/health", "/catalog", "/documents", "/questions", "/users", "/quiz", "/evaluation"];
 
+// Thêm endpoint backend mới ở cấp đầu tiên của đường dẫn (ví dụ /reports): nhớ thêm vào apiPaths để `npm run dev` chuyển tiếp được.
 export default defineConfig({
   plugins: [react()],
   server: {

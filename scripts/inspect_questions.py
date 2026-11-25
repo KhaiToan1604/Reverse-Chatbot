@@ -15,6 +15,7 @@ from app.db.models import Question
 
 
 def main() -> None:
+    """In các câu hỏi gần nhất theo bộ lọc (--status, --qtype, --limit); chỉ đọc, không sửa dữ liệu."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--status", default="rejected", choices=["rejected", "valid"])
     ap.add_argument("--qtype", choices=["mcq", "fill_blank", "short_answer", "scenario"])

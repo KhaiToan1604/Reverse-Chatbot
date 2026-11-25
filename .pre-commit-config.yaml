@@ -1,9 +1,12 @@
+# Chạy tự động trước mỗi `git commit` (cài một lần: `pip install pre-commit && pre-commit install`).
 repos:
+  # ruff: kiểm tra mã Python và tự sửa lỗi sửa được (--fix).
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:
       - id: ruff
         args: [--fix]
+  # Dọn khoảng trắng cuối dòng, thêm dòng trống cuối file, kiểm tra YAML hợp lệ.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks: [{ id: end-of-file-fixer }, { id: trailing-whitespace }, { id: check-yaml }]

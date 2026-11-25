@@ -12,7 +12,7 @@ Tài liệu ──► ingestion ──► embedding ──► vectorstore
             generation ◄───────────────────────┘
    LLM sinh câu hỏi ► luật (source_quote có trong tài liệu, 4 lựa chọn, ...) ► LLM kiểm định ► chống trùng ► lưu
                 │
-   adaptive.selector ──► quiz (phiên) ──► grading ──► adaptive.mastery ──┐
+   adaptive.selector ──► quiz (phiên) ──► grading ──► adaptive.mastery ────┐
         ▲  chọn chunk chưa học / đến hạn ôn / yếu nhất; mức nhớ ↔ vận dụng │
         └──────────────────────────────────────────────────────────────────┘
 evaluation: chất lượng câu hỏi · độ đồng thuận người–máy khi chấm · RAG vs không RAG
@@ -33,6 +33,57 @@ evaluation: chất lượng câu hỏi · độ đồng thuận người–máy 
 | `evaluation` | Báo cáo chất lượng, duyệt mẫu thủ công, kappa/MAE khi chấm, so sánh RAG vs không RAG |
 
 Lắp ráp ở `app/container.py`; API ở `app/api/routers/`.
+
+## Sơ đồ thư mục và mục đích từng file
+
+```
+reverse-chatbot/
+├── app/                      # backend (FastAPI)
+│   ├── main.py               # tạo ứng dụng, gắn router, phục vụ frontend/dist ở "/"
+│   ├── config.py             # toàn bộ cấu hình, đọc từ biến môi trường / .env
+│   ├── container.py          # lắp ráp các module thành một "container" dùng chung (không dùng biến toàn cục)
+│   ├── api/                  # lớp HTTP: chỉ nhận/trả dữ liệu, logic nằm ở modules/
+│   │   ├── deps.py           #   Depends dùng chung: lấy container, kiểm tra X-Admin-Key
+│   │   ├── schemas.py        #   kiểu dữ liệu của request (Pydantic)
+│   │   └── routers/          #   documents, questions, quiz, system (health, catalog, evaluation)
+│   ├── db/                   # base.py: engine + phiên làm việc; models.py: 7 bảng SQLAlchemy
+│   ├── common/               # text.py: chuẩn hoá tiếng Việt (bỏ dấu, tách token); errors.py: lỗi nghiệp vụ → mã HTTP
+│   └── modules/              # logic chính, mỗi thư mục một trách nhiệm (bảng ở mục trên)
+├── frontend/                 # giao diện React + TypeScript + Vite
+│   └── src/
+│       ├── main.tsx, App.tsx #   điểm vào và bảng định tuyến
+│       ├── api.ts, types.ts  #   mọi lời gọi API và kiểu dữ liệu tương ứng
+│       ├── store.ts          #   người học hiện tại (lưu ở localStorage)
+│       ├── pages/            #   Home, Quiz, Summary, Progress, Admin
+│       └── components/       #   QuestionCard, FeedbackPanel, Layout, ui (thành phần dùng chung)
+├── scripts/                  # công cụ dòng lệnh: ingest, generate, evaluate, inspect_questions
+├── data/sample/              # hai tài liệu thư viện mẫu (nội dung giả lập)
+├── tests/                    # unit / integration / e2e (xem mục Kiểm thử & CI/CD)
+├── .github/                  # workflows CI, release và dependabot
+├── Dockerfile, docker-compose.yml
+├── Makefile, pyproject.toml, .pre-commit-config.yaml
+├── requirements.txt          # phụ thuộc để chạy
+├── requirements-dev.txt      # thêm phụ thuộc phát triển
+└── .env.example              # mẫu cấu hình, sao chép thành .env
+```
+
+### Đổi cấu hình
+
+- Mọi tuỳ chọn là một trường của `Settings` trong `app/config.py`; đặt cùng tên (viết hoa) trong `.env` để ghi đè. Từng biến có giải thích trong `.env.example`.
+- Đổi nhà cung cấp LLM: sửa `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY` (và `LLM_BASE_URL` với `openai_compat`); không cần sửa mã.
+- Đổi ngưỡng chấm, hệ số mastery, lịch ôn: sửa các giá trị `pass_threshold`, `fuzzy_threshold`, `mastery_alpha`, `review_intervals_hours` trong `config.py`.
+- Đổi embedding model: sửa `EMBEDDING_MODEL`, rồi xoá `data/` và nạp lại tài liệu.
+
+### Thêm tính năng: nên sửa ở đâu
+
+| Muốn thêm | Làm ở |
+|---|---|
+| Endpoint mới | Router trong `app/api/routers/`, schema request ở `app/api/schemas.py`; ở frontend thêm một dòng vào `api` (`frontend/src/api.ts`) và kiểu phản hồi trong `types.ts`; nếu endpoint có đường dẫn gốc mới, thêm vào `apiPaths` trong `frontend/vite.config.ts` |
+| Nhà cung cấp LLM mới | Lớp con của `LLMProvider` (`app/modules/llm/`), đăng ký trong `llm/factory.py`, thêm giá trị cho `llm_provider` trong `config.py` |
+| Embedding mới | Lớp có cùng giao diện `Embedder` (`app/modules/embedding/`), đăng ký trong `embedding/factory.py` |
+| Định dạng tài liệu mới | Thêm nhánh đọc trong `app/modules/ingestion/loaders.py` |
+| Loại câu hỏi mới | Prompt và luật kiểm tra ở `app/modules/generation/` (`prompts.py`, `rules.py`, `schemas.py`), cách chấm ở `app/modules/grading/`, nhãn hiển thị ở `frontend/src/components/ui.tsx` và ô nhập ở `QuestionCard.tsx` |
+| Bảng dữ liệu mới | Thêm lớp vào `app/db/models.py`. Chưa có migration: dữ liệu cũ cần xoá hoặc dùng Alembic (xem Giới hạn hiện tại) |
 
 ## Chạy cả hệ thống (một lệnh phục vụ cả giao diện)
 

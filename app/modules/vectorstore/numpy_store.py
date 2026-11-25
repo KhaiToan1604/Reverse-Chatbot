@@ -15,6 +15,7 @@ class NumpyVectorStore:
     """`_ids[i]` là id chunk của hàng `_mat[i]`. Có khoá luồng vì FastAPI xử lý request ở nhiều thread."""
 
     def __init__(self, path: str | None = None):
+        """`path` là thư mục lưu (ids.json + vectors.npy); None = chỉ giữ trong RAM. Có sẵn dữ liệu thì tải lên."""
         self._path = Path(path) if path else None
         self._lock = threading.Lock()
         self._ids: list[int] = []
@@ -24,6 +25,7 @@ class NumpyVectorStore:
             self._mat = np.load(self._path / "vectors.npy")
 
     def _persist(self) -> None:
+        """Ghi toàn bộ ma trận và danh sách id ra đĩa (gọi sau mỗi lần thêm/xoá; đủ nhanh với số chunk nhỏ)."""
         if not self._path:
             return
         self._path.mkdir(parents=True, exist_ok=True)
@@ -31,6 +33,7 @@ class NumpyVectorStore:
         (self._path / "ids.json").write_text(json.dumps(self._ids))
 
     def count(self) -> int:
+        """Số vector đang lưu."""
         return len(self._ids)
 
     def add(self, ids: list[int], vectors: np.ndarray) -> None:
@@ -52,6 +55,7 @@ class NumpyVectorStore:
             self._persist()
 
     def _delete_locked(self, ids: list[int]) -> None:
+        """Xoá các id khỏi bộ nhớ; người gọi phải đang giữ `self._lock`. Không ghi đĩa."""
         if not self._ids or self._mat is None:
             return
         drop = set(ids)
@@ -62,6 +66,7 @@ class NumpyVectorStore:
         self._ids = [self._ids[i] for i in keep]
 
     def delete(self, ids: list[int]) -> None:
+        """Xoá vector theo id chunk (id không có thì bỏ qua) và ghi đĩa."""
         with self._lock:
             self._delete_locked(ids)
             self._persist()
@@ -69,6 +74,9 @@ class NumpyVectorStore:
     def search(
         self, query: np.ndarray, k: int = 3, allowed_ids: set[int] | None = None, exclude_ids: set[int] | None = None
     ) -> list[tuple[int, float]]:
+        """Top-k chunk giống `query` nhất, trả về [(chunk_id, cosine)] giảm dần.
+
+        `allowed_ids`: chỉ xét các id này (None = tất cả); `exclude_ids`: bỏ các id này."""
         with self._lock:
             if self._mat is None or not self._ids:
                 return []

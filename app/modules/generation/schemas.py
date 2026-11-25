@@ -1,4 +1,8 @@
-"""Kiểu dữ liệu của bước sinh câu hỏi."""
+"""Kiểu dữ liệu của bước sinh câu hỏi.
+
+Thêm loại câu hỏi mới: thêm tên vào QTYPES, thêm mẫu trong generation/prompts.py (_example), luật kiểm tra trong rules.py
+(check_question, finalize) và cách chấm trong grading/service.py.
+"""
 
 from dataclasses import dataclass
 
@@ -36,7 +40,11 @@ class RubricItem(BaseModel):
 
 
 class RawQuestion(BaseModel):
-    """Một câu hỏi do LLM sinh ra, trước khi kiểm tra."""
+    """Một câu hỏi do LLM sinh ra, trước khi kiểm tra.
+
+    Các field_validator bên dưới sửa những lệch định dạng nhỏ mà LLM hay mắc, để không loại oan câu đúng nội dung.
+    `extra="ignore"` bỏ qua khoá lạ trong JSON của LLM.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -58,7 +66,8 @@ class RawQuestion(BaseModel):
     def _coerce_calculation(cls, v):
         return v.strip() or None if isinstance(v, str) else None
 
-    # Hai validator dưới đây "dung thứ" output hơi lệch của LLM (rubric là list chuỗi, alt_answers là một chuỗi).
+    # Các validator dưới đây (mode="before" = chạy trước khi pydantic kiểm kiểu) "dung thứ" output hơi lệch của LLM:
+    # rubric là list chuỗi, options là dict, correct_index là chữ cái, alt_answers là một chuỗi.
     @field_validator("rubric", mode="before")
     @classmethod
     def _coerce_rubric(cls, v):

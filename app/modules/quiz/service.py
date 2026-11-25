@@ -36,6 +36,7 @@ class QuizService:
 
     # ---- phiên -------------------------------------------------------------------------
     def start_session(self, db: Session, user_id: int, num_questions: int, document_id: int | None) -> QuizSession:
+        """Tạo phiên học mới. NotFound nếu người dùng hoặc tài liệu không tồn tại."""
         if not db.get(User, user_id):
             raise NotFound("Không tìm thấy người dùng")
         if document_id and not db.get(Document, document_id):
@@ -46,15 +47,18 @@ class QuizService:
         return sess
 
     def _get_session(self, db: Session, session_id: int) -> QuizSession:
+        """Lấy phiên theo id, NotFound (HTTP 404) nếu không có."""
         sess = db.get(QuizSession, session_id)
         if not sess:
             raise NotFound("Không tìm thấy phiên")
         return sess
 
     def _answered(self, db: Session, sess: QuizSession) -> int:
+        """Số câu đã trả lời trong phiên (đếm theo bảng Attempt)."""
         return len(db.scalars(select(Attempt.id).where(Attempt.session_id == sess.id)).all())
 
     def _finish(self, db: Session, sess: QuizSession) -> None:
+        """Đánh dấu phiên đã kết thúc và xoá câu đang chờ."""
         sess.status = "finished"
         sess.current_question_id = None
         sess.finished_at = utcnow()
@@ -95,6 +99,7 @@ class QuizService:
             session_id=sess.id, user_id=sess.user_id, question_id=q.id, user_answer=answer, score=res.score,
             is_correct=res.is_correct, feedback=res.feedback, missing_points=res.missing_points, graded_by=res.graded_by,
         ))
+        # Mastery khoá theo (người dùng, chunk): lần đầu gặp mục này thì tạo bản ghi mới, rồi cập nhật bằng EMA/Leitner.
         m = db.get(Mastery, (sess.user_id, q.chunk_id))
         if m is None:
             m = Mastery(user_id=sess.user_id, chunk_id=q.chunk_id, mastery=0.0, streak=0, correct_count=0, wrong_count=0)
@@ -125,6 +130,7 @@ class QuizService:
         }
 
     def summary(self, db: Session, session_id: int) -> dict:
+        """Tổng kết phiên: điểm trung bình, số câu đúng, chủ đề dưới ngưỡng đạt (yếu nhất trước) và chi tiết từng câu."""
         sess = self._get_session(db, session_id)
         rows = db.execute(
             select(Attempt, Question, Chunk).join(Question, Attempt.question_id == Question.id)

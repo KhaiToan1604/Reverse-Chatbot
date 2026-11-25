@@ -11,7 +11,7 @@ def grade_mcq(q: Question, answer: str) -> GradeResult:
     """Chấp nhận đáp án là chữ cái ("B", "b)", "B. ...") hoặc gõ lại đúng nội dung lựa chọn."""
     a = answer.strip()
     letter = None
-    m = norm_text(a)
+    m = norm_text(a)  # chữ thường, bỏ dấu câu: "B." và "b)" đều thành "b"
     # Ký tự đầu là a-d và theo sau không phải chữ/số (tránh nhầm từ như "bao" với đáp án B).
     if m[:1] in "abcd" and (len(m) == 1 or (len(m) > 1 and not m[1].isalnum())):
         letter = m[0].upper()
@@ -20,7 +20,7 @@ def grade_mcq(q: Question, answer: str) -> GradeResult:
             if norm_text(opt) == m:
                 letter = "ABCD"[i]
                 break
-    correct = letter == q.answer
+    correct = letter == q.answer  # với mcq, q.answer là chữ cái đáp án đúng ("A".."D") sau khi đã xáo lựa chọn
     # Đáp án đúng do API trả riêng ở reference_answer; feedback không lặp lại để giao diện khỏi hiển thị hai lần.
     return GradeResult(
         score=1.0 if correct else 0.0,

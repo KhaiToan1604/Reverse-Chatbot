@@ -1,3 +1,9 @@
+"""Chọn câu hỏi kế tiếp cho người học (được modules/quiz/service.py gọi mỗi lần cần câu mới).
+
+Hai quyết định: (1) học mục (chunk) nào: chưa học trước, rồi mục đến hạn ôn, rồi các mục còn lại; (2) hỏi mức nào:
+nhớ hay vận dụng, theo mức nắm vững. Muốn đổi chiến lược chọn: sửa hàm `priority` trong `QuestionSelector.pick`.
+"""
+
 import logging
 import random
 
@@ -11,10 +17,11 @@ from app.modules.generation.schemas import Spec
 from app.modules.generation.service import GenerationService
 
 log = logging.getLogger(__name__)
-MAX_ON_DEMAND_TRIES = 3
+MAX_ON_DEMAND_TRIES = 3  # số lần tối đa gọi LLM sinh câu bổ sung trong MỘT lượt chọn câu (tránh người học chờ quá lâu)
 
 
 def specs_for_level(level: str) -> list[Spec]:
+    """Loại câu hỏi cần sinh thêm cho từng mức: vận dụng = tình huống + tự luận ngắn; nhớ = trắc nghiệm + điền khuyết."""
     if level == "apply":
         return [Spec("scenario", "apply"), Spec("short_answer", "apply")]
     return [Spec("mcq", "recall"), Spec("fill_blank", "recall")]
@@ -25,10 +32,12 @@ class QuestionSelector:
     Mức câu hỏi (nhớ / vận dụng) theo mastery. Thiếu câu trong ngân hàng thì sinh theo yêu cầu."""
 
     def __init__(self, settings: Settings, generator: GenerationService | None = None):
+        """`generator` có thể là None: khi đó chỉ chọn từ ngân hàng câu hỏi có sẵn, không sinh thêm."""
         self.s = settings
         self.generator = generator
 
     def pick(self, db: Session, user_id: int, session: QuizSession, rng: random.Random | None = None) -> Question | None:
+        """Trả về câu hỏi hợp lệ kế tiếp, hoặc None nếu không có tài liệu/câu hỏi phù hợp. `rng` để chọn ngẫu nhiên tái lập được."""
         rng = rng or random.Random()
         now = utcnow()
         stmt = select(Chunk).order_by(Chunk.id)

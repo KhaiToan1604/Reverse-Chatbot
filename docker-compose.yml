@@ -1,11 +1,15 @@
+# Chạy cả hệ thống: `docker compose up --build`, mở http://localhost:8000. Cấu hình LLM/embedding đọc từ file .env.
 services:
   app:
     build: .
     ports: ["8000:8000"]
+    # Nếu chưa có .env, tạo từ .env.example (xem ghi chú về LLM_PROVIDER trong file đó).
     env_file: [.env]
+    # Ghi đè hai đường dẫn dữ liệu sang /srv/data để lưu lâu dài trong volume `appdata` (giữ lại khi xoá container).
     environment:
       DATABASE_URL: sqlite:////srv/data/app.db
       VECTOR_STORE_PATH: /srv/data/vectors
     volumes: ["appdata:/srv/data"]
+# Volume đặt tên: chứa CSDL SQLite và vector store. Đổi embedding model thì phải xoá volume này và nạp lại tài liệu.
 volumes:
   appdata:

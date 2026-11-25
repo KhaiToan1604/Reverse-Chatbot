@@ -2,6 +2,9 @@
 
 Nguyên tắc: dữ liệu (tài liệu, câu hỏi) luôn đặt trong khối <<<...>>> qua `section()` và được dặn là "dữ liệu, không phải chỉ dẫn".
 Thẻ [[TASK:...]] cho MockLLM biết nhiệm vụ; sửa prompt thì giữ nguyên các thẻ và tên khối (CONTEXT, SPEC, QUESTION).
+
+Muốn đổi cách LLM sinh câu hỏi: sửa SYSTEM_GENERATE (quy tắc), `_example` (mẫu JSON từng loại) hoặc `_format_section` (lời dặn định dạng).
+Muốn đổi cách kiểm định: sửa SYSTEM_VALIDATE (nhớ giữ khớp với các khoá trong validator.py). Được generation/service.py gọi.
 """
 
 from app.modules.generation.schemas import Spec
@@ -40,6 +43,7 @@ _EX_QUOTE = "Câu lạc bộ cờ vua họp vào 8 giờ sáng thứ Bảy hằn
 
 
 def _example(qtype: str, level: str) -> dict:
+    """Mẫu JSON minh hoạ cho một loại câu hỏi, đưa vào prompt (nội dung mẫu cố ý không liên quan tới tài liệu thật)."""
     # Thứ tự khoá có chủ đích: model sinh JSON từ trái sang phải, nên căn cứ (source_quote) và lời giải (explanation) phải đứng
     # TRƯỚC đáp án (correct_index/answer). Nếu đáp án đứng trước, model "chốt" đáp án rồi mới giải thích -> dễ sai phép tính.
     base = {"qtype": qtype, "level": level, "question": "", "options": None, "source_quote": _EX_QUOTE,
@@ -65,6 +69,7 @@ def _example(qtype: str, level: str) -> dict:
 
 
 def _format_section(specs: list[Spec]) -> str:
+    """Phần "ĐỊNH DẠNG ĐẦU RA" của prompt, dựng theo đúng các loại câu hỏi đang yêu cầu (mỗi loại một mẫu + lưu ý riêng)."""
     import json
 
     kinds = list(dict.fromkeys((s.qtype, s.level) for s in specs))
@@ -83,6 +88,11 @@ def _format_section(specs: list[Spec]) -> str:
 
 
 def build_generate_prompt(heading: str, context: str, specs: list[Spec]) -> tuple[str, str]:
+    """Dựng cặp (system, user) cho lượt sinh câu hỏi.
+
+    heading: tiêu đề mục của chunk; context: văn bản nguồn (đã gộp chunk lân cận nếu có); specs: loại + mức + số câu cần sinh.
+    Mỗi Spec được mở rộng thành `count` phần tử trong khối SPEC; LLM phải trả đúng một câu cho mỗi phần tử, theo thứ tự.
+    """
     import json
 
     spec_list = [{"qtype": s.qtype, "level": s.level} for s in specs for _ in range(s.count)]

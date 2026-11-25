@@ -22,7 +22,7 @@ _SessionLocal: sessionmaker[Session] | None = None
 
 
 def init_engine(database_url: str) -> Engine:
-    """Khởi tạo engine (gọi lại để đổi DB, ví dụ trong test)."""
+    """Khởi tạo engine và sessionmaker toàn cục (gọi lại sẽ thay engine cũ). `database_url` lấy từ Settings.database_url."""
     global _engine, _SessionLocal
     if database_url.startswith("sqlite:///") and ":memory:" not in database_url:
         Path(database_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +42,7 @@ def init_engine(database_url: str) -> Engine:
 
 
 def dispose_engine() -> None:
-    """Đóng mọi kết nối (gọi khi tắt app, và giữa các test) để không rò rỉ kết nối SQLite."""
+    """Đóng mọi kết nối (gọi khi tắt app) để không rò rỉ kết nối SQLite; sau đó phải gọi lại `init_engine` mới dùng được DB."""
     global _engine, _SessionLocal
     if _engine is not None:
         _engine.dispose()
@@ -51,7 +51,11 @@ def dispose_engine() -> None:
 
 
 def create_all() -> None:
-    """Tạo các bảng nếu chưa có (chưa dùng migration; đổi cấu trúc bảng cần xoá DB hoặc thêm Alembic)."""
+    """Tạo các bảng nếu chưa có (chưa dùng migration).
+
+    Muốn thêm cột/bảng: sửa app/db/models.py. Với DB đã có dữ liệu, `create_all` KHÔNG thêm cột vào bảng cũ: cần xoá data/app.db
+    (rồi nạp lại tài liệu) hoặc dùng Alembic.
+    """
     from app.db import models  # noqa: F401  (đăng ký bảng)
 
     assert _engine is not None, "init_engine() chưa được gọi"
@@ -59,7 +63,7 @@ def create_all() -> None:
 
 
 def get_db() -> Iterator[Session]:
-    """FastAPI dependency."""
+    """FastAPI dependency: mỗi request một phiên (Session), tự đóng khi xong. Cần `db.commit()` tay nếu có ghi dữ liệu."""
     assert _SessionLocal is not None, "init_engine() chưa được gọi"
     db = _SessionLocal()
     try:

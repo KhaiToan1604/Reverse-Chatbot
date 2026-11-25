@@ -22,6 +22,11 @@ QUY TẮC
 
 
 def build_grade_prompt(question: str, reference: str, rubric: list[dict], student: str) -> tuple[str, str]:
+    """Dựng cặp (system, user) cho LLM chấm. Chỉ gửi nội dung ý rubric (không gửi trọng số) để LLM không tự tính điểm.
+
+    Sửa cách chấm: chỉnh SYSTEM_GRADE ở trên; giữ nguyên thẻ [[TASK:grade]], tên khối và khoá "covered" vì llm_grader.py
+    và MockLLM đọc theo đó.
+    """
     numbered = [{"index": i, "point": r["point"]} for i, r in enumerate(rubric)]
     user = "\n\n".join(
         [

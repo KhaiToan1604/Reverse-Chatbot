@@ -2,6 +2,9 @@
 
 Quy trình mỗi chunk: dựng ngữ cảnh -> LLM sinh -> kiểm bằng luật -> LLM kiểm định -> loại trùng -> lưu.
 Câu không đạt vẫn được lưu với status="rejected" và lý do để đo chất lượng.
+
+Được gọi từ API quản trị (api/routers/questions.py), scripts/generate.py, quiz/service.py (sinh theo nhu cầu)
+và evaluation/runner.py. Các ngưỡng (validate_questions, dedup_threshold, retrieval_top_k...) nằm trong app/config.py.
 """
 
 import logging
@@ -42,6 +45,7 @@ class GenerationService:
     """RAG theo chiều ngược: lấy chunk (+ chunk liên quan) -> LLM sinh câu hỏi -> kiểm tra -> lưu."""
 
     def __init__(self, settings: Settings, llm: LLMProvider, embedder: Embedder, store: NumpyVectorStore):
+        """llm: sinh và kiểm định; embedder + store: tìm chunk lân cận (ngữ cảnh) và đo độ trùng câu hỏi."""
         self.s = settings
         self.llm = llm
         self.embedder = embedder
@@ -64,6 +68,7 @@ class GenerationService:
 
     @staticmethod
     def _fmt(c: Chunk) -> str:
+        """Định dạng một chunk cho prompt: dòng "[Mục: tiêu đề]" rồi nội dung (MockLLM cũng đọc dòng này)."""
         return f"[Mục: {c.heading}]\n{c.text}" if c.heading else c.text
 
     # ---- sinh câu hỏi -----------------------------------------------------------------------
@@ -71,7 +76,13 @@ class GenerationService:
         self, db: Session, chunk: Chunk, specs: list[Spec] | None = None, use_rag_context: bool = True, dedupe: bool = True,
         only_missing: bool = False,
     ) -> GenerationReport:
-        """only_missing=True: bỏ qua yêu cầu (loại, mức) mà chunk đã đủ câu hợp lệ -> chạy lại sau lỗi không tốn thêm lượt gọi LLM."""
+        """Sinh câu hỏi cho một chunk và commit vào DB; trả về GenerationReport (không ném lỗi do LLM, lỗi nằm trong report.errors).
+
+        specs: các (loại, mức, số câu) cần sinh; mặc định là default_specs().
+        use_rag_context: False = baseline "không RAG" để so sánh (LLM không thấy tài liệu, nhưng câu vẫn bị kiểm theo tài liệu thật).
+        dedupe: loại câu quá giống câu hợp lệ đã có của chunk (tắt khi đo đạc để không bị lệch).
+        only_missing=True: bỏ qua yêu cầu (loại, mức) mà chunk đã đủ câu hợp lệ -> chạy lại sau lỗi không tốn thêm lượt gọi LLM.
+        """
         report = GenerationReport()
         specs = specs or default_specs()
         if only_missing:
@@ -80,7 +91,7 @@ class GenerationService:
             ).all()
             have = Counter((r[0], r[1]) for r in rows)
             specs = [sp for sp in specs if have[(sp.qtype, sp.level)] < sp.count]
-        # Mỗi mức một lượt gọi LLM. Mức "apply" cần thêm chunk lân cận để dựng tình huống nhiều bước.
+        # Mỗi mức một lượt gọi LLM (cả lô câu cùng mức trong một lần). Mức "apply" cần thêm chunk lân cận để dựng tình huống nhiều bước.
         for level in ("recall", "apply"):
             lvl_specs = [sp for sp in specs if sp.level == level]
             if not lvl_specs:
@@ -104,12 +115,13 @@ class GenerationService:
             report.errors.append(str(e))
             report.rate_limited = isinstance(e, LLMRateLimited)
             return
-        # LLM có thể trả {"questions": [...]} hoặc trực tiếp một danh sách.
+        # LLM có thể trả {"questions": [...]} hoặc trực tiếp một danh sách (chấp nhận cả hai).
         items = data.get("questions") if isinstance(data, dict) else data
         if not isinstance(items, list):
             report.errors.append("LLM không trả về danh sách questions")
             return
 
+        # Danh sách câu hợp lệ đã có của chunk, dùng để loại trùng; được bổ sung dần khi lưu câu mới trong lô này.
         existing = (
             [q.question for q in db.scalars(select(Question).where(Question.chunk_id == chunk.id, Question.status == "valid"))]
             if dedupe else []
@@ -144,10 +156,12 @@ class GenerationService:
             if not reason and i in verdict:
                 ok, why = verdict[i]
                 reason = None if ok else why
+            # Nếu validate_questions=False (tắt trong config) thì `verdict` rỗng và câu qua luật được coi là đạt.
             if not reason and dedupe and self._is_duplicate(raw.question, existing):
                 reason = DUPLICATE_REASON
 
             if reason or fin is None:
+                # Lưu cả câu bị loại (kèm lý do) để báo cáo đánh giá thống kê được; các trường lấy từ bản thô vì chưa chuẩn hoá.
                 row = Question(
                     chunk_id=chunk.id, qtype=raw.qtype[:20], level=raw.level[:20], question=raw.question,
                     options=raw.options, answer=raw.answer, source_quote=raw.source_quote,
@@ -157,7 +171,7 @@ class GenerationService:
                 report.rejected.append(row)
                 continue
 
-            fin["meta"]["context_chunk_ids"] = ctx_ids
+            fin["meta"]["context_chunk_ids"] = ctx_ids  # chunk đã dùng làm ngữ cảnh, để truy vết câu hỏi về nguồn
             row = Question(chunk_id=chunk.id, status="valid", model=self.llm.model or self.llm.name, **fin)
             db.add(row)
             report.created.append(row)
@@ -173,6 +187,7 @@ class GenerationService:
         return bool(sims.max() >= self.s.dedup_threshold)
 
     def generate_for_document(self, db: Session, document_id: int, specs: list[Spec] | None = None) -> GenerationReport:
+        """Sinh câu hỏi cho mọi chunk của một tài liệu (theo thứ tự vị trí) và gộp kết quả; dừng sớm nếu hết hạn mức LLM."""
         total = GenerationReport()
         chunks = db.scalars(select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.position)).all()
         for c in chunks:

@@ -17,6 +17,7 @@ from app.modules.evaluation import runner
 
 
 def main() -> None:
+    """Đọc tham số dòng lệnh, chạy đúng một phép đánh giá và in kết quả JSON. Thêm phép đo mới: thêm subparser + nhánh `elif`."""
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("report")

@@ -2,6 +2,9 @@
 
 Mỗi chunk là một "đơn vị tri thức": vừa đủ nhỏ để sinh câu hỏi bám sát nguồn, và là đơn vị
 theo dõi mức thành thạo (mastery) của người học.
+
+Kích thước chunk chỉnh bằng CHUNK_MAX_CHARS, CHUNK_OVERLAP_CHARS, CHUNK_MIN_CHARS (app/config.py). Chunk theo heading
+vì mỗi mục quy định thường trọn một ý, câu hỏi sinh ra ít bị lệch ngữ cảnh. Được ingestion/service.py gọi.
 """
 
 import re

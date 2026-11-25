@@ -13,6 +13,7 @@ from app.modules.ingestion.loaders import SUPPORTED
 
 
 def main() -> None:
+    """Nạp một file hoặc cả thư mục tài liệu. `--title` chỉ có tác dụng khi nạp đúng một file."""
     ap = argparse.ArgumentParser()
     ap.add_argument("path")
     ap.add_argument("--title")

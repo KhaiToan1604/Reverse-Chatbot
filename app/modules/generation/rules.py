@@ -1,4 +1,9 @@
-"""Kiểm tra bằng luật (rẻ, không tốn LLM) + chuẩn hoá câu hỏi trước khi lưu."""
+"""Kiểm tra bằng luật (rẻ, không tốn LLM) + chuẩn hoá câu hỏi trước khi lưu.
+
+Đây là lớp kiểm định thứ nhất trong ba lớp (luật -> LLM kiểm định ở validator.py -> loại trùng ở service.py).
+Được generation/service.py gọi: ensure_rubric -> check_question (trả lý do loại hoặc None) -> finalize (dict để lưu DB).
+Ngưỡng và số lượng cố định (4 lựa chọn, tối đa 6 từ cho điền khuyết, 92% trích dẫn...) nằm ngay trong các hàm dưới; sửa tại đây.
+"""
 
 import ast
 import random
@@ -15,7 +20,10 @@ OPTION_PREFIX_RE = re.compile(r"^\s*(?:[A-Da-d][\.\):]|\d[\.\)])\s+")
 
 
 def grounded(quote: str, context: str, min_tokens: int = 4) -> bool:
-    """source_quote phải thực sự nằm trong context (chống LLM bịa căn cứ)."""
+    """source_quote phải thực sự nằm trong context (chống LLM bịa căn cứ).
+
+    min_tokens: trích dẫn ngắn hơn số từ này bị coi là không đủ làm căn cứ. Ngưỡng lệch 0,92 sửa ở dòng cuối hàm.
+    """
     q, c = norm_text(quote), norm_text(context)
     if len(q.split()) < min_tokens:
         return False
@@ -37,7 +45,7 @@ def ensure_rubric(q: RawQuestion) -> None:
         q.rubric = [RubricItem(point=q.answer.strip(), weight=1.0)]
 
 
-NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
+NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")  # số, kể cả dạng có dấu phân cách hàng nghìn/thập phân: 2.000, 1,5
 
 
 def _numbers(text: str) -> set[str]:
@@ -50,6 +58,7 @@ def unverified_numbers(answer: str, context: str, question: str) -> set[str]:
     return _numbers(answer) - _numbers(context) - _numbers(question)
 
 
+# Giới hạn kích thước biểu thức để phép tính của LLM không thể gây tốn tài nguyên (độ dài chuỗi, số nút cú pháp).
 _MAX_CALC_LEN = 100
 _MAX_CALC_NODES = 40
 
@@ -72,6 +81,7 @@ def eval_calculation(expr: str) -> tuple[int, set[str]] | None:
     operands: set[str] = set()
 
     def ev(node: ast.AST) -> Fraction:
+        """Duyệt cây cú pháp, chỉ chấp nhận số nguyên và + - * / ; mọi loại nút khác bị từ chối (ValueError)."""
         if isinstance(node, ast.Expression):
             return ev(node.body)
         if isinstance(node, ast.Constant) and type(node.value) is int:
@@ -120,6 +130,10 @@ def calculation_supports(calc: str | None, extra: set[str], context: str, questi
 def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool = True) -> str | None:
     """Trả về lý do loại, hoặc None nếu đạt.
 
+    q: câu thô do LLM sinh; context: văn bản mà câu phải có căn cứ trong đó.
+    Các kiểm tra theo thứ tự: loại/mức hợp lệ -> độ dài -> source_quote có thật -> luật riêng từng loại (mcq, fill_blank, tự luận)
+    -> số trong đáp án có căn cứ. Lý do trả về được lưu vào cột reject_reason và hiện ở báo cáo đánh giá.
+
     reject_unverified_numbers: loại câu có đáp án chứa số do LLM tự tính (không xuất hiện trong tài liệu hay câu hỏi). Model nhỏ
     hay sai phép tính (ví dụ quên nhân số cuốn sách) và LLM kiểm định cùng model không bắt được; thà bỏ câu còn hơn để đáp án sai
     đến tay người học. Tắt bằng REJECT_UNVERIFIED_NUMBERS=false khi đã dùng model mạnh hoặc có người duyệt.
@@ -128,7 +142,7 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
         return f"qtype không hợp lệ: {q.qtype}"
     if q.level not in LEVELS:
         return f"level không hợp lệ: {q.level}"
-    if not (10 <= len(q.question.strip()) <= 1200):
+    if not (10 <= len(q.question.strip()) <= 1200):  # giới hạn độ dài câu hỏi (ký tự)
         return "độ dài câu hỏi bất thường"
     if not grounded(q.source_quote, context):
         return "source_quote không có trong tài liệu (không có căn cứ)"
@@ -136,6 +150,7 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
     if q.qtype == "mcq":
         opts = [OPTION_PREFIX_RE.sub("", o).strip() for o in (q.options or [])]
         if len(opts) != 4 or any(not o for o in opts):
+            # Số lựa chọn cố định là 4 (A..D); đổi thì sửa cả finalize() và grading/rule_based.py.
             return "mcq cần đúng 4 lựa chọn không rỗng"
         if len({norm_text(o) for o in opts}) != 4:
             return "mcq có lựa chọn trùng nhau"
@@ -144,7 +159,7 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
     elif q.qtype == "fill_blank":
         if len(BLANK_RE.findall(q.question)) != 1:
             return "fill_blank cần đúng một chỗ trống ____"
-        if not q.answer.strip() or len(q.answer.split()) > 6:
+        if not q.answer.strip() or len(q.answer.split()) > 6:  # đáp án điền khuyết tối đa 6 từ (prompt dặn tối đa 5 từ)
             return "đáp án fill_blank rỗng hoặc quá dài"
         if norm_text(q.answer) not in norm_text(context):
             return "đáp án fill_blank không xuất hiện trong tài liệu"
@@ -158,7 +173,7 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
             return "rubric có ý rỗng"
 
     if reject_unverified_numbers:
-        # mcq: chỉ xét lựa chọn đúng (các lựa chọn nhiễu được phép có số bất kỳ).
+        # Khối này chặn lỗi "đáp án là số tự tính sai". mcq: chỉ xét lựa chọn đúng (các lựa chọn nhiễu được phép có số bất kỳ).
         answer = OPTION_PREFIX_RE.sub("", q.options[q.correct_index]).strip() if q.qtype == "mcq" and q.options else q.answer  # type: ignore[index]
         extra = unverified_numbers(answer, context, q.question)
         computed: set[str] = set()
@@ -178,7 +193,11 @@ def check_question(q: RawQuestion, context: str, reject_unverified_numbers: bool
 
 
 def finalize(q: RawQuestion) -> dict:
-    """Chuẩn hoá thành dict lưu DB. MCQ: xáo lựa chọn bằng code để tránh LLM thiên vị vị trí đáp án."""
+    """Chuẩn hoá thành dict lưu DB. MCQ: xáo lựa chọn bằng code để tránh LLM thiên vị vị trí đáp án.
+
+    Chỉ gọi sau khi check_question đã đạt (nên các chỉ số và danh sách ở đây được coi là hợp lệ). Khoá của dict khớp cột của
+    bảng questions (app/db/models.py); `meta` chứa thông tin phụ: calculation, alt_answers. Với mcq, `answer` là chữ cái A..D.
+    """
     out: dict = {
         "qtype": q.qtype,
         "level": q.level,
@@ -192,6 +211,7 @@ def finalize(q: RawQuestion) -> dict:
     if q.qtype == "mcq":
         opts = [OPTION_PREFIX_RE.sub("", o).strip() for o in (q.options or [])]
         correct_text = opts[q.correct_index]  # type: ignore[index]
+        # Hạt giống lấy từ nội dung câu hỏi nên sinh lại cùng câu thì ra cùng thứ tự (tái lập được, dễ so sánh giữa các lần chạy).
         rng = random.Random(norm_text(q.question))  # xáo tất định theo nội dung câu hỏi
         rng.shuffle(opts)
         out["options"] = opts
@@ -203,6 +223,7 @@ def finalize(q: RawQuestion) -> dict:
     if q.qtype == "fill_blank":
         out["meta"]["alt_answers"] = [a.strip() for a in q.alt_answers if a.strip()]
     if q.qtype in ("short_answer", "scenario") and q.rubric:
+        # Chuẩn hoá trọng số về tổng 1; trọng số âm/0 được thay bằng 1 trước khi chia (LLM không phải lúc nào cũng cho tổng đúng 1).
         total = sum(max(r.weight, 0) for r in q.rubric) or float(len(q.rubric))
         out["rubric"] = [
             {"point": r.point.strip(), "weight": round((max(r.weight, 0) or 1.0) / total, 4)} for r in q.rubric

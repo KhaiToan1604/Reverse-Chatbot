@@ -1,3 +1,5 @@
+"""Router quản trị câu hỏi (yêu cầu X-Admin-Key): sinh câu hỏi bằng LLM, liệt kê, xem chi tiết (kèm đáp án)."""
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ router = APIRouter(prefix="/questions", tags=["questions"], dependencies=[Depend
 
 
 def _q_out(q: Question) -> dict:
+    """Dạng JSON đầy đủ của câu hỏi (CÓ đáp án và rubric): chỉ dùng cho quản trị, không gửi cho người học."""
     return {
         "id": q.id, "chunk_id": q.chunk_id, "qtype": q.qtype, "level": q.level, "question": q.question,
         "options": q.options, "answer": q.answer, "explanation": q.explanation, "rubric": q.rubric,
@@ -52,6 +55,7 @@ def generate(body: GenerateIn, db: Session = Depends(get_db), c: Container = Dep
 @router.get("")
 def list_questions(document_id: int | None = None, status: str = "valid", qtype: str | None = None,
                    level: str | None = None, limit: int = Query(50, le=500), offset: int = 0, db: Session = Depends(get_db)):
+    """Liệt kê câu hỏi, lọc theo tài liệu/trạng thái (valid | rejected)/loại/mức; phân trang bằng limit (tối đa 500) và offset."""
     stmt = select(Question).where(Question.status == status)
     if document_id:
         stmt = stmt.join(Chunk, Question.chunk_id == Chunk.id).where(Chunk.document_id == document_id)
@@ -64,6 +68,7 @@ def list_questions(document_id: int | None = None, status: str = "valid", qtype:
 
 @router.get("/{question_id}")
 def get_question(question_id: int, db: Session = Depends(get_db)):
+    """Xem một câu hỏi theo id (404 nếu không có)."""
     q = db.get(Question, question_id)
     if not q:
         raise NotFound("Không tìm thấy câu hỏi")

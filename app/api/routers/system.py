@@ -15,6 +15,7 @@ router = APIRouter()
 
 @router.get("/health", tags=["system"])
 def health(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Kiểm tra server sống, kèm LLM/embedding đang dùng và số lượng dữ liệu (để nhìn nhanh cấu hình đúng chưa)."""
     return {
         "status": "ok",
         "llm": {"provider": c.llm.name, "model": c.llm.model},
@@ -28,4 +29,5 @@ def health(db: Session = Depends(get_db), c: Container = Depends(get_container))
 
 @router.get("/evaluation/report", tags=["evaluation"], dependencies=[Depends(require_admin)])
 def evaluation_report(db: Session = Depends(get_db)):
+    """Báo cáo chất lượng ngân hàng câu hỏi (số câu hợp lệ/bị loại, lý do loại...). Cần X-Admin-Key nếu đã đặt."""
     return question_quality_report(db)

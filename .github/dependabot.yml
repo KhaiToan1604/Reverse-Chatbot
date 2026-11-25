@@ -1,3 +1,4 @@
+# Dependabot tự mở pull request khi có bản cập nhật: pip và npm hằng tuần, GitHub Actions và Docker hằng tháng.
 version: 2
 updates:
   - { package-ecosystem: pip, directory: "/", schedule: { interval: weekly } }

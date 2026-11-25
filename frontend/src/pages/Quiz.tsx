@@ -17,6 +17,7 @@ export default function Quiz() {
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Lấy câu kế tiếp. Dùng chung cho lần vào trang, nút "Câu tiếp theo" và nút "Thử lại" khi lỗi.
   const loadNext = useCallback(async () => {
     setLoading(true); setError(null); setResult(null);
     try {
@@ -29,6 +30,7 @@ export default function Quiz() {
   // Tải câu đầu tiên khi vào trang. Gọi /next lặp lại không đổi câu (backend lưu câu đang chờ) nên an toàn khi tải lại trang.
   useEffect(() => { void loadNext(); }, [loadNext]);
 
+  // Gửi đáp án; trong lúc chờ chấm (grading) thẻ câu hỏi bị khoá để không gửi trùng.
   const submit = async (answer: string) => {
     if (!cur?.question) return;
     setGrading(true); setError(null);
@@ -41,6 +43,7 @@ export default function Quiz() {
 
   return (
     <section className="stack">
+      {/* Sau khi chấm, tính luôn câu vừa trả lời (+1) để thanh tiến độ không bị chậm một nhịp. */}
       {cur && <div className="progressbar"><Meter value={(result ? cur.answered + 1 : cur.answered) / cur.total} label="Tiến độ phiên học" /></div>}
 
       {loading && <Busy>Đang chuẩn bị câu hỏi… lần đầu có thể mất vài giây.</Busy>}
@@ -51,6 +54,7 @@ export default function Quiz() {
         <>
           <QuestionCard q={cur.question} index={cur.answered + 1} total={cur.total} disabled={grading || result !== null} onSubmit={submit} />
           {grading && <Busy>Đang chấm câu trả lời…</Busy>}
+          {/* Câu cuối cùng: nút chuyển sang trang tổng kết thay vì gọi /next. */}
           {result && <FeedbackPanel r={result} onNext={() => (result.session_finished ? nav(`/summary/${sid}`) : void loadNext())} />}
         </>
       )}

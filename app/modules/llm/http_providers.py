@@ -2,6 +2,9 @@
 
 - OpenAICompatProvider: Groq, Ollama (local), OpenRouter, vLLM, OpenAI... (chuẩn /chat/completions)
 - GeminiProvider: Google Gemini API (free tier)
+
+Cả hai dùng chung `_post_with_retry` (thử lại có chờ) và `_Throttle` (giãn cách giữa các lần gọi).
+Cấu hình (khoá, model, timeout, số lần thử, giãn cách) lấy từ app/config.py qua llm/factory.py.
 """
 
 import time
@@ -19,6 +22,7 @@ class _Throttle:
         self._last = 0.0
 
     def wait(self) -> None:
+        """Ngủ cho đủ `min_interval` giây kể từ lần gọi trước (nếu cần), rồi ghi nhận thời điểm gọi mới."""
         if self.min_interval > 0:
             gap = self._last + self.min_interval - time.monotonic()
             if gap > 0:
@@ -39,9 +43,9 @@ def _post_with_retry(client: httpx.Client, url: str, *, retries: int, throttle: 
 
     Hết lượt thử mà vẫn 429 thì ném LLMRateLimited để phía trên biết dừng thay vì gọi tiếp.
     """
-    delay = 2.0
+    delay = 2.0  # thời gian chờ ban đầu (giây), nhân đôi sau mỗi lần thử lại
     last: Exception | None = None
-    limited = False
+    limited = False  # lần thử gần nhất có bị 429 không: quyết định ném LLMRateLimited hay LLMError ở cuối
     for attempt in range(retries + 1):
         if throttle:
             throttle.wait()
@@ -66,6 +70,11 @@ def _post_with_retry(client: httpx.Client, url: str, *, retries: int, throttle: 
 
 
 class OpenAICompatProvider(LLMProvider):
+    """Gọi bất kỳ dịch vụ nào theo chuẩn OpenAI `/chat/completions` (Groq, Ollama, OpenRouter, vLLM, OpenAI...).
+
+    base_url là địa chỉ gốc (ví dụ http://localhost:11434/v1 cho Ollama); api_key để trống nếu dịch vụ không cần (Ollama local).
+    """
+
     name = "openai_compat"
 
     def __init__(
@@ -81,12 +90,14 @@ class OpenAICompatProvider(LLMProvider):
         self.client = httpx.Client(timeout=timeout, headers=headers)
 
     def complete(self, system: str, user: str, *, json_mode: bool = True, temperature: float = 0.3) -> str:
+        """Gửi một lượt chat (system + user) và trả về nội dung text của lựa chọn đầu tiên."""
         payload: dict = {
             "model": self.model,
             "temperature": temperature,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }
         if json_mode:
+            # Một số dịch vụ không hỗ trợ trường này; extract_json (base.py) vẫn xử lý được khi mô hình trả kèm văn bản thừa.
             payload["response_format"] = {"type": "json_object"}
         resp = _post_with_retry(
             self.client, f"{self.base_url}/chat/completions", retries=self.retries, throttle=self.throttle, json=payload
@@ -98,6 +109,8 @@ class OpenAICompatProvider(LLMProvider):
 
 
 class GeminiProvider(LLMProvider):
+    """Gọi Google Gemini (REST `generateContent`). Khoá API gửi qua header, không nằm trong URL (tránh lộ vào log)."""
+
     name = "gemini"
 
     def __init__(
@@ -112,6 +125,7 @@ class GeminiProvider(LLMProvider):
         self.client = httpx.Client(timeout=timeout, headers={"x-goog-api-key": api_key})
 
     def complete(self, system: str, user: str, *, json_mode: bool = True, temperature: float = 0.3) -> str:
+        """Gửi một lượt chat và ghép mọi phần text của ứng viên đầu tiên thành một chuỗi."""
         gen_cfg: dict = {"temperature": temperature}
         if json_mode:
             gen_cfg["responseMimeType"] = "application/json"

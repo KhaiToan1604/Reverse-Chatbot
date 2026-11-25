@@ -14,6 +14,7 @@ export default function Home({ user, setUser }: { user: User | null; setUser: (u
   const [error, setError] = useState<string | null>(null);
   const catalog = useLoad(api.catalog, []);
 
+  // Tạo người học mới; chỉ lưu id và tên ở trình duyệt (xem store.ts), chưa có đăng nhập thật.
   const register = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -21,6 +22,7 @@ export default function Home({ user, setUser }: { user: User | null; setUser: (u
     try { setUser(await api.createUser(name.trim())); } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   };
 
+  // Bắt đầu phiên học. docId = null nghĩa là học trên tất cả tài liệu.
   const start = async () => {
     if (!user) return;
     setBusy(true); setError(null);
@@ -29,6 +31,7 @@ export default function Home({ user, setUser }: { user: User | null; setUser: (u
       nav(`/quiz/${s.session_id}`);
     } catch (err) {
       const msg = (err as Error).message;
+      // Backend trả lỗi "người dùng không tồn tại" (ví dụ DB đã bị xoá): bỏ người dùng cũ để họ nhập tên lại.
       if (/người dùng/i.test(msg)) { setUser(null); setError("Tài khoản này không còn tồn tại trên máy chủ. Hãy nhập tên để tạo lại."); }
       else setError(msg);
       setBusy(false);
@@ -54,6 +57,7 @@ export default function Home({ user, setUser }: { user: User | null; setUser: (u
 
   const docs = catalog.data ?? [];
   const selected = docs.find((d) => d.id === docId);
+  // Có mục chưa có câu hỏi sẵn thì lần đầu sẽ phải chờ LLM sinh câu (GENERATE_ON_DEMAND ở backend): báo trước cho người học.
   const needsGen = docId === null ? docs.some((d) => !d.has_questions) : selected ? !selected.has_questions : false;
 
   return (

@@ -1,9 +1,11 @@
+# Metadata dự án và cấu hình công cụ (pytest, coverage, ruff). Phụ thuộc cài đặt nằm ở requirements*.txt.
 [project]
 name = "reverse-chatbot"
 version = "0.1.0"
 description = "Reverse Chatbot: hệ thống RAG đảo chiều, hỏi người học từ tài liệu đã nạp"
 requires-python = ">=3.11"
 
+# Chạy bằng `pytest`. --strict-markers: marker viết sai tên sẽ báo lỗi thay vì bị bỏ qua lặng lẽ.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
@@ -12,8 +14,10 @@ markers = [
     "integration: kiểm thử tích hợp nhiều module qua API (TestClient) hoặc DB thật trên đĩa",
     "e2e: kiểm thử đầu cuối, chạy server thật và (với test giao diện) trình duyệt thật",
 ]
+# ResourceWarning (quên đóng file/kết nối) bị coi là lỗi để bắt rò rỉ tài nguyên sớm.
 filterwarnings = ["error::ResourceWarning"]
 
+# Độ phủ đo trên thư mục app/ (có đo nhánh). fail_under: dưới ngưỡng thì lệnh coverage thất bại.
 [tool.coverage.run]
 source = ["app"]
 branch = true
@@ -24,12 +28,14 @@ show_missing = true
 skip_covered = true
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
 
+# ruff: kiểm tra mã. Bỏ qua frontend/ và data/ vì không phải Python của ứng dụng.
 [tool.ruff]
 line-length = 140
 target-version = "py311"
 extend-exclude = ["frontend", "data"]
 
 [tool.ruff.lint]
+# E,F: lỗi cơ bản; I: sắp xếp import; B: lỗi hay gặp; UP: cú pháp Python mới; SIM: đơn giản hoá; S: bảo mật; PT: quy ước pytest.
 select = ["E", "F", "I", "B", "UP", "SIM", "S", "PT"]
 ignore = [
     "S101",  # assert dùng trong test và kiểm tra bất biến
@@ -37,6 +43,7 @@ ignore = [
     "S311",  # random chỉ dùng để xáo trộn/lấy mẫu, không dùng cho mật mã
 ]
 
+# Miễn trừ theo file: prompt là chuỗi dài có chủ ý; test được phép dùng khoá giả, subprocess...
 [tool.ruff.lint.per-file-ignores]
 "app/modules/generation/prompts.py" = ["E501"]
 "app/modules/grading/heuristic.py" = ["E501"]

@@ -12,8 +12,12 @@ class AppError(Exception):
 
 
 class NotFound(AppError):
+    """Không tìm thấy tài nguyên -> HTTP 404."""
+
     status_code = 404
 
 
 class Conflict(AppError):
+    """Trạng thái hiện tại không cho phép thao tác (vd. phiên đã kết thúc, chưa có câu hỏi) -> HTTP 409."""
+
     status_code = 409

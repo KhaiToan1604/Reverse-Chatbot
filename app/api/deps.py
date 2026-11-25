@@ -1,4 +1,6 @@
-"""Phụ thuộc dùng chung của các router (FastAPI Depends)."""
+"""Phụ thuộc dùng chung của các router (FastAPI Depends).
+
+Muốn bảo vệ thêm một router bằng khoá quản trị: thêm `dependencies=[Depends(require_admin)]` khi tạo APIRouter."""
 
 import secrets
 

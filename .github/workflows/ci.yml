@@ -1,11 +1,14 @@
+# Chạy khi đẩy lên main và với mọi pull request. Bốn job: backend, frontend (song song) -> e2e, docker (chạy sau khi hai job đầu qua).
 name: CI
 on:
   push: { branches: [main] }
   pull_request:
+# Quyền tối thiểu (chỉ đọc mã); concurrency huỷ lần chạy cũ khi có commit mới trên cùng nhánh.
 permissions: { contents: read }
 concurrency: { group: "ci-${{ github.ref }}", cancel-in-progress: true }
 
 jobs:
+  # Job 1: kiểm tra mã Python (lint, unit + integration, độ phủ) trên hai phiên bản Python.
   backend:
     runs-on: ubuntu-latest
     strategy:
@@ -21,6 +24,7 @@ jobs:
         if: matrix.python == '3.12'
         with: { name: coverage, path: coverage.xml }
 
+  # Job 2: build giao diện; kết quả (frontend/dist) được lưu thành artifact cho job e2e.
   frontend:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: frontend } }
@@ -33,6 +37,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: frontend-dist, path: frontend/dist }
 
+  # Job 3: chạy server thật + trình duyệt Chromium trên bản giao diện đã build ở job 2.
   e2e:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
@@ -45,6 +50,7 @@ jobs:
         with: { name: frontend-dist, path: frontend/dist }
       - run: pytest tests/e2e
 
+  # Job 4: build image và thử khởi động (smoke test): đợi tối đa 30 giây cho /health trả lời, lỗi thì in log container.
   docker:
     needs: [backend, frontend]
     runs-on: ubuntu-latest

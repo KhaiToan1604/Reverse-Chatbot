@@ -1,3 +1,6 @@
+# Phụ thuộc chạy ứng dụng (cài trong Docker và khi triển khai).
+# web: FastAPI + uvicorn; dữ liệu: SQLAlchemy (SQLite), pydantic; gọi LLM: httpx; vector: numpy;
+# đọc tài liệu: pypdf (.pdf), python-docx (.docx); python-multipart cần cho upload file.
 fastapi>=0.110
 uvicorn[standard]>=0.29
 sqlalchemy>=2.0

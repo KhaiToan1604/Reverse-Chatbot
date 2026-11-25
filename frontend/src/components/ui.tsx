@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
+// Dòng chờ có vòng quay; role="status" để trình đọc màn hình báo cho người dùng khiếm thị.
 export function Busy({ children }: { children: ReactNode }) {
   return (
     <div className="busy" role="status" aria-live="polite">
@@ -11,6 +12,7 @@ export function Busy({ children }: { children: ReactNode }) {
   );
 }
 
+// Hộp báo lỗi; không hiển thị gì khi error = null nên có thể đặt sẵn trong trang. onRetry (tuỳ chọn) thêm nút "Thử lại".
 export function ErrorNote({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
   if (!error) return null;
   return (
@@ -31,6 +33,7 @@ export function Meter({ value, label }: { value: number; label: string }) {
   );
 }
 
+// Nhãn tiếng Việt cho mã loại/mức của backend. Thêm loại câu mới: thêm vào đây và vào QType trong types.ts.
 export const levelLabel = { recall: "Nhớ thông tin", apply: "Vận dụng" } as const;
 export const typeLabel = { mcq: "Trắc nghiệm", fill_blank: "Điền khuyết", short_answer: "Trả lời ngắn", scenario: "Tình huống" } as const;
 
@@ -54,7 +57,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
 /** Đổi thời điểm ôn lại (ISO, UTC không kèm "Z" từ backend) thành chữ như "ôn lại sau 3 ngày". */
 export function fmtDue(iso: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso + "Z");
+  const d = new Date(iso + "Z"); // backend lưu giờ UTC nhưng không kèm "Z"; thiếu "Z" trình duyệt sẽ hiểu nhầm là giờ địa phương
   const hours = (d.getTime() - Date.now()) / 36e5;
   if (hours <= 0.05) return "ôn lại ngay";
   if (hours < 24) return `ôn lại sau ${Math.ceil(hours)} giờ`;

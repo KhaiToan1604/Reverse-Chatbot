@@ -1,6 +1,8 @@
+# Phát hành image Docker lên GitHub Container Registry khi tạo tag dạng v* (ví dụ: git tag v0.1.0 && git push --tags).
 name: Release image
 on:
   push: { tags: ["v*"] }
+# packages: write để đẩy image; dùng GITHUB_TOKEN có sẵn nên không cần tạo bí mật riêng.
 permissions: { contents: read, packages: write }
 jobs:
   publish:
@@ -11,5 +13,6 @@ jobs:
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
       - uses: docker/build-push-action@v6
         with:
+          # Mỗi lần phát hành gắn hai thẻ: đúng tên tag và "latest".
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }},ghcr.io/${{ github.repository }}:latest

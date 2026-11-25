@@ -14,9 +14,11 @@ export default function FeedbackPanel({ r, onNext }: { r: AnswerResp; onNext: ()
       <div className="stamp" aria-hidden="true">{verdict}</div>
       <div className="feedback-body">
         <h2 className="sr">{verdict}</h2>
+        {/* Câu đóng (rule) chỉ có đúng/sai nên không cần hiện điểm phần trăm; câu mở thì hiện điểm. */}
         {(partial || (!r.is_correct && r.graded_by !== "rule")) && <p className="score">Điểm câu này: {pct}%</p>}
         {r.feedback && <p>{r.feedback}</p>}
 
+        {/* Các ý còn thiếu chỉ có nghĩa với câu chấm theo rubric (graded_by khác "rule"). */}
         {r.missing_points.length > 0 && r.graded_by !== "rule" && (
           <div>
             <p className="sub">Bạn còn thiếu:</p>
@@ -24,6 +26,7 @@ export default function FeedbackPanel({ r, onNext }: { r: AnswerResp; onNext: ()
           </div>
         )}
 
+        {/* Đáp án tham chiếu chỉ lộ ra SAU khi đã trả lời sai; trước đó backend không gửi. */}
         {!r.is_correct && <p><span className="sub">Đáp án tham chiếu: </span>{r.reference_answer}</p>}
         {r.explanation && <p className="muted">{r.explanation}</p>}
         {r.source_quote && <blockquote className="source"><span className="sub">Trong tài liệu: </span>“{r.source_quote}”</blockquote>}

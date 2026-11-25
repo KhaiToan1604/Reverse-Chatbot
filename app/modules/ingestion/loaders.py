@@ -1,18 +1,27 @@
-"""Đọc tài liệu nguồn thành văn bản thuần: .txt .md .pdf .docx"""
+"""Đọc tài liệu nguồn thành văn bản thuần: .txt .md .pdf .docx
+
+Được ingestion/service.py gọi. Muốn hỗ trợ định dạng mới (vd. .html): thêm đuôi vào `SUPPORTED`, thêm một nhánh
+`if ext == ...` trong `load_text` trả về văn bản (nên dùng `#`/`##` cho tiêu đề để chunker chia mục đúng)."""
 
 import io
 from pathlib import Path
 
 from app.common.text import nfc
 
-SUPPORTED = {".txt", ".md", ".pdf", ".docx"}
+SUPPORTED = {".txt", ".md", ".pdf", ".docx"}  # router /documents và scripts/ingest.py dùng tập này để lọc file
 
 
 class UnsupportedFormat(ValueError):
+    """Định dạng không đọc được (API trả HTTP 415)."""
+
     pass
 
 
 def load_text(filename: str, data: bytes) -> str:
+    """Giải mã nội dung `data` của tệp `filename` (nhận dạng theo đuôi file) thành văn bản NFC.
+
+    .txt/.md thử lần lượt các bảng mã utf-8, utf-16, cp1258 (tiếng Việt cũ); .pdf cần có lớp chữ (PDF scan sẽ bị từ chối);
+    .docx giữ tiêu đề dạng Heading thành dấu `#`. Ném UnsupportedFormat nếu không đọc được."""
     ext = Path(filename).suffix.lower()
     if ext in (".txt", ".md"):
         for enc in ("utf-8-sig", "utf-16", "cp1258"):

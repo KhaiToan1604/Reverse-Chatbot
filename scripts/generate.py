@@ -16,6 +16,7 @@ from app.db.models import Chunk, Document
 
 
 def main() -> None:
+    """Sinh câu hỏi cho một tài liệu (--document ID) hoặc tất cả (--all). Mặc định chỉ sinh phần còn thiếu nên chạy lại an toàn."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--document", type=int)
     ap.add_argument("--all", action="store_true")

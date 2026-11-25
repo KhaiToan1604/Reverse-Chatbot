@@ -9,6 +9,7 @@ export default function Summary({ user }: { user: User | null }) {
   const nav = useNavigate();
   const { data: s, error, loading, reload } = useLoad(() => api.summary(sid), [sid]);
 
+  // "Học tiếp": mở phiên mới cùng số câu; lỗi (ví dụ người dùng không còn) thì quay về trang chủ.
   const again = async () => {
     if (!user || !s) return;
     try { nav(`/quiz/${(await api.startSession(user.id, s.total, null)).session_id}`); } catch { nav("/"); }
@@ -17,6 +18,7 @@ export default function Summary({ user }: { user: User | null }) {
   if (loading) return <Busy>Đang tổng hợp kết quả…</Busy>;
   if (error || !s) return <ErrorNote error={error ?? "Không tải được kết quả."} onRetry={reload} />;
 
+  // weak_topics và attempts do backend tính sẵn (quiz/service.summary); trang này chỉ hiển thị.
   const pct = Math.round(s.average_score * 100);
   return (
     <section className="stack narrow">

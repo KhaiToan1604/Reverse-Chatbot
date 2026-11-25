@@ -21,6 +21,7 @@ export default function Progress({ user, onMissingUser }: { user: User | null; o
   const byDoc = new Map<string, TopicProgress[]>();
   data.topics.forEach((t) => byDoc.set(t.document, [...(byDoc.get(t.document) ?? []), t]));
 
+  // "Ôn mục đến hạn": mở phiên mới với 5-10 câu, tuỳ số mục đến hạn. Backend tự ưu tiên chunk đến hạn (adaptive/selector).
   const reviewNow = async () => {
     try { nav(`/quiz/${(await api.startSession(user.id, Math.min(10, Math.max(5, data.topics_due)), null)).session_id}`); }
     catch (e) { setStartError((e as Error).message); }

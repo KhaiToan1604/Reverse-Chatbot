@@ -14,10 +14,12 @@ from app.modules.ingestion.loaders import SUPPORTED, UnsupportedFormat
 
 router = APIRouter(prefix="/documents", tags=["documents"], dependencies=[Depends(require_admin)])
 # Mã lỗi: 413 file quá lớn, 415 định dạng không hỗ trợ, 422 nội dung không dùng được.
+# Muốn đổi giới hạn dung lượng upload: sửa MAX_UPLOAD (byte). Lưu ý file được đọc hết vào bộ nhớ rồi mới kiểm tra kích thước.
 MAX_UPLOAD = 10 * 1024 * 1024
 
 
 def _doc_out(db: Session, d: Document, existed: bool | None = None) -> dict:
+    """Dạng JSON của một tài liệu, kèm số chunk; `already_existed` chỉ có khi vừa nạp (True = nội dung đã nạp từ trước)."""
     n = db.scalar(select(func.count()).select_from(Chunk).where(Chunk.document_id == d.id))
     out = {"id": d.id, "title": d.title, "source": d.source, "num_chunks": n, "created_at": d.created_at.isoformat()}
     if existed is not None:
@@ -28,6 +30,7 @@ def _doc_out(db: Session, d: Document, existed: bool | None = None) -> dict:
 @router.post("", status_code=201)
 async def upload_document(file: UploadFile = File(...), title: str | None = Form(None),
                           db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Nạp file .txt/.md/.pdf/.docx (multipart). Thêm định dạng mới: sửa app/modules/ingestion/loaders.py."""
     data = await file.read()
     if len(data) > MAX_UPLOAD:
         raise HTTPException(413, "File quá lớn (tối đa 10MB)")
@@ -42,6 +45,7 @@ async def upload_document(file: UploadFile = File(...), title: str | None = Form
 
 @router.post("/text", status_code=201)
 def ingest_text(body: TextIngestIn, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Nạp tài liệu từ văn bản gửi dưới dạng JSON."""
     try:
         res = c.ingestion.ingest_text(db, body.text, body.title, source="api")
     except ValueError as e:
@@ -51,11 +55,13 @@ def ingest_text(body: TextIngestIn, db: Session = Depends(get_db), c: Container 
 
 @router.get("")
 def list_documents(db: Session = Depends(get_db)):
+    """Liệt kê mọi tài liệu (kèm số chunk)."""
     return [_doc_out(db, d) for d in db.scalars(select(Document).order_by(Document.id))]
 
 
 @router.get("/{document_id}/chunks")
 def list_chunks(document_id: int, db: Session = Depends(get_db)):
+    """Xem các chunk của một tài liệu theo thứ tự (để kiểm tra việc chia mục). 404 nếu không có tài liệu."""
     if not db.get(Document, document_id):
         raise NotFound("Không tìm thấy tài liệu")
     rows = db.scalars(select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.position))
@@ -64,5 +70,6 @@ def list_chunks(document_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{document_id}", status_code=204)
 def delete_document(document_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Xoá tài liệu và mọi dữ liệu phụ thuộc (câu hỏi, lượt trả lời, mastery, vector). 404 nếu không có."""
     if not c.ingestion.delete_document(db, document_id):
         raise NotFound("Không tìm thấy tài liệu")

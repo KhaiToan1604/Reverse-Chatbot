@@ -1,3 +1,5 @@
+"""Bộ nhúng thật chạy local bằng thư viện sentence-transformers. Chọn bằng EMBEDDING_PROVIDER=sentence_transformers."""
+
 import numpy as np
 
 
@@ -9,6 +11,7 @@ class SentenceTransformerEmbedder:
     """
 
     def __init__(self, model_name: str):
+        """Tải mô hình `model_name` (lần đầu cần mạng, vài trăm MB đến vài GB). Ném RuntimeError nếu chưa cài thư viện."""
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as e:  # pragma: no cover
@@ -20,6 +23,7 @@ class SentenceTransformerEmbedder:
         self.dim = int(get_dim())
 
     def embed(self, texts: list[str]) -> np.ndarray:
+        """Ma trận (n, dim) float32 đã chuẩn hoá L2 (nên cosine = tích vô hướng); xử lý theo lô 16 đoạn cho đỡ tốn RAM."""
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
         out = self._model.encode(texts, normalize_embeddings=True, batch_size=16, show_progress_bar=False)

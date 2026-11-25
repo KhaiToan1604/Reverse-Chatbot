@@ -22,6 +22,7 @@ export default function QuestionCard({ q, index, total, disabled, onSubmit }: Pr
 
   // Với trắc nghiệm gửi chữ cái (A-D) vì backend chấm theo chữ cái; các loại khác gửi chuỗi người học gõ.
   const answer = q.qtype === "mcq" ? (choice ?? "") : text.trim();
+  // Chặn gửi khi trống hoặc đang chấm (tránh gửi hai lần khi bấm nhanh).
   const submit = () => { if (answer && !disabled) onSubmit(answer); };
 
   return (
@@ -40,6 +41,7 @@ export default function QuestionCard({ q, index, total, disabled, onSubmit }: Pr
           <fieldset className="choices" disabled={disabled}>
             <legend className="sr">Chọn một đáp án</legend>
             {q.options.map((opt) => {
+              // Mỗi lựa chọn có dạng "A. nội dung": ký tự đầu là chữ cái (giá trị gửi lên), từ ký tự thứ 4 là nội dung hiển thị.
               const letter = opt.charAt(0);
               return (
                 <label key={opt} className={`choice${choice === letter ? " is-picked" : ""}`}>
@@ -52,6 +54,7 @@ export default function QuestionCard({ q, index, total, disabled, onSubmit }: Pr
           </fieldset>
         )}
 
+        {/* Điền khuyết: một dòng, giới hạn 200 ký tự. */}
         {q.qtype === "fill_blank" && (
           <input
             ref={inputRef as React.RefObject<HTMLInputElement>}
@@ -60,6 +63,7 @@ export default function QuestionCard({ q, index, total, disabled, onSubmit }: Pr
           />
         )}
 
+        {/* Câu mở (tự luận ngắn, tình huống): nhiều dòng, giới hạn 2000 ký tự, Ctrl/Cmd + Enter để gửi. */}
         {(q.qtype === "short_answer" || q.qtype === "scenario") && (
           <textarea
             ref={inputRef as React.RefObject<HTMLTextAreaElement>}

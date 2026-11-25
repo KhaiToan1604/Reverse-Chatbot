@@ -2,6 +2,8 @@
 
 Nó đọc các khối <<<...>>> trong prompt và dựng câu hỏi/chấm điểm đơn giản từ chính văn bản.
 Chất lượng không đại diện cho LLM thật — chỉ để kiểm tra luồng hệ thống.
+Chọn bằng LLM_PROVIDER=mock (mặc định trong app/config.py). Khi sửa prompt, giữ nguyên thẻ [[TASK:...]] và tên khối
+(CONTEXT, SPEC, QUESTIONS, RUBRIC, STUDENT) vì MockLLM dựa vào chúng để nhận biết nhiệm vụ.
 """
 
 import json
@@ -30,9 +32,11 @@ class MockLLM(LLMProvider):
     model = "mock-1"
 
     def complete(self, system: str, user: str, *, json_mode: bool = True, temperature: float = 0.3) -> str:
+        """Định tuyến theo thẻ nhiệm vụ trong `system`; nhiệm vụ lạ trả về "{}". `json_mode`/`temperature` được bỏ qua."""
         if "[[TASK:generate]]" in system:
             return json.dumps(self._generate(user), ensure_ascii=False)
         if "[[TASK:validate]]" in system:
+            # Kiểm định giả: mọi câu đều đạt (chỉ để chạy được luồng; không đánh giá gì thật).
             n = len(json.loads(get_section(user, "QUESTIONS") or "[]"))
             ok = {"answerable": True, "answer_correct": True, "unambiguous": True, "reason": "mock"}
             return json.dumps({"results": [{"index": i, **ok} for i in range(n)]})

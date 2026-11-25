@@ -12,6 +12,7 @@ export default function Admin() {
   const [keyDraft, setKeyDraft] = useState("");
   const [authed, setAuthed] = useState(0); // đổi giá trị để tải lại sau khi nhập khoá
   const docs = useLoad(api.docs, [authed]);
+  // Backend trả 401 kèm thông điệp có chữ "X-Admin-Key" khi thiếu/sai khoá: coi đó là tín hiệu để hiện form nhập khoá.
   const locked = docs.error !== null && /X-Admin-Key/.test(docs.error);
 
   if (locked) {
@@ -57,10 +58,13 @@ function Docs({ docs, reload }: { docs: DocItem[]; reload: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Chạy một thao tác quản trị: bật nhãn chờ (busy), xoá thông báo cũ, bắt lỗi, rồi tải lại danh sách tài liệu.
+  // fn có thể trả về một chuỗi để hiện làm thông báo thành công.
   const run = async (label: string, fn: () => Promise<string | void>) => {
     setBusy(label); setError(null); setMsg(null);
     try { const m = await fn(); if (m) setMsg(m); reload(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   };
+  // Nạp trùng nội dung thì backend trả already_existed (nạp idempotent theo hash nội dung), không tạo bản mới.
   const ingestMsg = (d: DocItem) => (d.already_existed ? `“${d.title}” đã có từ trước (nội dung trùng), không nạp lại.` : `Đã nạp “${d.title}”: ${d.num_chunks} mục.`);
   const genMsg = (r: GenerateResp) =>
     `Tạo ${r.created} câu hợp lệ, loại ${r.rejected} câu.` + (r.errors.length ? ` Lỗi: ${r.errors[0]}` : "");
@@ -108,6 +112,7 @@ function Docs({ docs, reload }: { docs: DocItem[]; reload: () => void }) {
 function DocRow({ d, busy, onGenerate, onDelete }: { d: DocItem; busy: boolean; onGenerate: () => void; onDelete: () => void }) {
   const [chunks, setChunks] = useState<ChunkItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Bấm lần đầu: tải các chunk của tài liệu để xem; bấm lần nữa: ẩn đi.
   const toggle = async () => {
     if (chunks) { setChunks(null); return; }
     try { setChunks(await api.chunks(d.id)); } catch (e) { setErr((e as Error).message); }
@@ -134,6 +139,7 @@ function Questions({ docs }: { docs: DocItem[] }) {
   const [qtype, setQtype] = useState("");
   const [level, setLevel] = useState("");
   const [docId, setDocId] = useState("");
+  // Tải lại tự động mỗi khi đổi bộ lọc (mảng phụ thuộc ở cuối). Chuỗi rỗng = không lọc theo tiêu chí đó.
   const { data, error, loading, reload } = useLoad(
     () => api.questions({ status, qtype: qtype || undefined, level: level || undefined, document_id: docId ? Number(docId) : undefined }),
     [status, qtype, level, docId],

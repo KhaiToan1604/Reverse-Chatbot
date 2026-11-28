@@ -8,3 +8,8 @@ def test_catalog_is_public_and_hides_content(loaded):
     assert not any(x["has_questions"] for x in rows)
     client.post("/questions/generate", json={"document_id": ids[0]})
     assert client.get("/catalog").json()[0]["has_questions"] is True
+
+
+def test_generate_unknown_document_is_404(client):
+    r = client.post("/questions/generate", json={"document_id": 99999}, )
+    assert r.status_code == 404

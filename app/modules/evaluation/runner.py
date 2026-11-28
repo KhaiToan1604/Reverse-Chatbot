@@ -12,6 +12,7 @@ Các số liệu này chỉ có ý nghĩa khi chạy với LLM và embedding th�
 import csv
 import json
 import random
+import re
 from collections import Counter
 
 from sqlalchemy import delete, func, select
@@ -23,6 +24,15 @@ from app.modules.generation.service import DUPLICATE_REASON, GenerationService
 from app.modules.grading.service import GradingService
 
 
+def reason_group(reason: str | None) -> str:
+    """Khoá gom lý do loại cho báo cáo: lấy phần trước dấu ":" và bỏ phần trong ngoặc (thường là con số cụ thể).
+
+    Nhờ vậy "số trong đáp án (3000) ..." và "số trong đáp án (70000) ..." được đếm chung một dòng thay vì mỗi con số một dòng.
+    """
+    head = (reason or "").split(":")[0]
+    return re.sub(r"\s*\([^)]*\)", "", head).strip()[:80]
+
+
 def question_quality_report(db: Session) -> dict:
     """Tỉ lệ qua kiểm tra tự động. Câu bị loại vì TRÙNG (thường do chạy sinh lặp lại) không tính là lỗi chất lượng:
     chúng được báo riêng và loại khỏi mẫu số của auto_pass_rate."""
@@ -31,9 +41,7 @@ def question_quality_report(db: Session) -> dict:
         select(func.count()).select_from(Question).where(Question.status == "rejected", Question.reject_reason == DUPLICATE_REASON)
     ) or 0
     valid = db.scalar(select(func.count()).select_from(Question).where(Question.status == "valid")) or 0
-    reasons = Counter(
-        (r or "").split(":")[0][:80] for r in db.scalars(select(Question.reject_reason).where(Question.status == "rejected"))
-    )
+    reasons = Counter(reason_group(r) for r in db.scalars(select(Question.reject_reason).where(Question.status == "rejected")))
     by_type = {
         f"{t}/{lv}": n
         for t, lv, n in db.execute(
@@ -157,7 +165,7 @@ def rag_vs_norag(db: Session, gen: GenerationService, n_chunks: int = 10, seed: 
             rep = gen.generate_for_chunk(db, chunk, specs or default_specs(), use_rag_context=use_rag, dedupe=False)
             created += len(rep.created)
             rejected += len(rep.rejected)
-            reasons.update((q.reject_reason or "").split(":")[0][:80] for q in rep.rejected)
+            reasons.update(reason_group(q.reject_reason) for q in rep.rejected)
             ids = [q.id for q in rep.created + rep.rejected]  # xoá câu tạm để phép đo không làm đầy ngân hàng câu hỏi
             if ids:
                 db.execute(delete(Question).where(Question.id.in_(ids)))

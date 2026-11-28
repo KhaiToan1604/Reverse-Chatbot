@@ -9,7 +9,7 @@ from app.api.schemas import GenerateIn
 from app.common.errors import NotFound
 from app.container import Container
 from app.db.base import get_db
-from app.db.models import Chunk, Question
+from app.db.models import Chunk, Document, Question
 from app.modules.generation.schemas import Spec
 
 router = APIRouter(prefix="/questions", tags=["questions"], dependencies=[Depends(require_admin)])
@@ -42,6 +42,8 @@ def generate(body: GenerateIn, db: Session = Depends(get_db), c: Container = Dep
             raise NotFound("Không tìm thấy chunk")
         rep = c.generation.generate_for_chunk(db, chunk, specs)
     elif body.document_id:
+        if not db.get(Document, body.document_id):
+            raise NotFound("Không tìm thấy tài liệu")
         rep = c.generation.generate_for_document(db, body.document_id, specs)
     else:
         raise HTTPException(422, "Cần document_id hoặc chunk_id")

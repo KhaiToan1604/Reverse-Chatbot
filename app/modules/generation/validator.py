@@ -92,7 +92,10 @@ def llm_validate_batch(llm: LLMProvider, context: str, qs: list[dict], _split: b
             continue
         # Cả ba tiêu chí phải đạt; thiếu/sai khoá thì bool(None) = False nên mặc định là loại (an toàn).
         ok = all(r.get(k) is True or str(r.get(k)).strip().lower() == "true" for k in _KEYS)
-        out.append((ok, "" if ok else f"validator loại: {str(r.get('reason', ''))[:200]}"))
+        # Ghi kèm giá trị từng tiêu chí SAU dấu ":" (báo cáo gom lý do theo phần trước ":") để xem validator loại vì tiêu chí nào,
+        # và phát hiện được trường hợp lời giải thích ủng hộ câu hỏi nhưng cờ vẫn false (loại oan do model nhỏ).
+        flags = ", ".join(f"{k}={r.get(k)}" for k in _KEYS)
+        out.append((ok, "" if ok else f"validator loại: [{flags}] {str(r.get('reason', ''))[:200]}"))
     return out
 
 

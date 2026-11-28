@@ -12,14 +12,14 @@ def grade_mcq(q: Question, answer: str) -> GradeResult:
     a = answer.strip()
     letter = None
     m = norm_text(a)  # chữ thường, bỏ dấu câu: "B." và "b)" đều thành "b"
+    # Gõ lại đúng nội dung một lựa chọn thì xét trước: tránh hiểu nhầm "a b c" (nội dung) thành đáp án A.
+    for i, opt in enumerate(q.options or []):
+        if m and norm_text(opt) == m:
+            letter = "ABCD"[i]
+            break
     # Ký tự đầu là a-d và theo sau không phải chữ/số (tránh nhầm từ như "bao" với đáp án B).
-    if m[:1] in "abcd" and (len(m) == 1 or (len(m) > 1 and not m[1].isalnum())):
+    if letter is None and m[:1] and m[0] in "abcd" and (len(m) == 1 or not m[1].isalnum()):
         letter = m[0].upper()
-    if letter is None and q.options:  # người dùng gõ nội dung lựa chọn
-        for i, opt in enumerate(q.options):
-            if norm_text(opt) == m:
-                letter = "ABCD"[i]
-                break
     correct = letter == q.answer  # với mcq, q.answer là chữ cái đáp án đúng ("A".."D") sau khi đã xáo lựa chọn
     # Đáp án đúng do API trả riêng ở reference_answer; feedback không lặp lại để giao diện khỏi hiển thị hai lần.
     return GradeResult(

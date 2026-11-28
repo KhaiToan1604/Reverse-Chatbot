@@ -43,13 +43,13 @@ class NumpyVectorStore:
         if not ids:
             return
         with self._lock:
-            self._delete_locked(ids)
             vectors = vectors.astype(np.float32)
             if self._mat is not None and len(self._ids) and self._mat.shape[1] != vectors.shape[1]:
-                raise ValueError(
+                raise ValueError(  # kiểm tra TRƯỚC khi xoá để lỗi không làm mất vector cũ
                     f"Số chiều embedding ({vectors.shape[1]}) khác vector store ({self._mat.shape[1]}). "
                     "Đã đổi embedding model? Hãy ingest lại từ đầu."
                 )
+            self._delete_locked(ids)
             self._mat = vectors if not self._ids or self._mat is None else np.vstack([self._mat, vectors])
             self._ids.extend(ids)
             self._persist()

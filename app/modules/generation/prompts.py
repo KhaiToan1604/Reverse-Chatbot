@@ -82,6 +82,9 @@ def _format_section(specs: list[Spec]) -> str:
     if any(q == "mcq" for q, _ in kinds):
         lines.append('LƯU Ý mcq: "options" BẮT BUỘC là mảng đúng 4 chuỗi (không để null) và "correct_index" là số 0-3; '
                      '"answer" là nội dung lựa chọn đúng.')
+    if any(q == "fill_blank" for q, _ in kinds):
+        lines.append('LƯU Ý fill_blank: "question" là CÂU KHẲNG ĐỊNH (không phải câu hỏi "...nào?", "...bao nhiêu?") có ĐÚNG MỘT chỗ trống '
+                     '____ thay cho đáp án; "answer" là cụm từ lấy nguyên văn từ CONTEXT, tối đa 5 từ.')
     if any(q in ("short_answer", "scenario") for q, _ in kinds):
         lines.append('LƯU Ý tự luận: "rubric" KHÔNG được null; mỗi ý có "point" và "weight". scenario cần ít nhất 2 ý, short_answer có thể chỉ 1 ý.')
     return "\n".join(lines)

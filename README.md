@@ -107,7 +107,7 @@ npm run dev
 ```bash
 pip install -r requirements.txt
 cp .env.example .env            # mặc định: mock LLM + hashing embedding, chạy offline được
-python -m scripts.ingest data/sample
+python -m scripts.ingest data/library
 python -m scripts.generate --all    # sinh sẵn ngân hàng câu hỏi (giảm gọi LLM lúc học)
 python -m uvicorn app.main:app --reload       # docs: http://localhost:8000/docs
 pip install -r requirements-dev.txt   # chỉ cần cho test/lint

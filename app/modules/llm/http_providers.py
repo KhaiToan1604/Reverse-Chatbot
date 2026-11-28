@@ -60,6 +60,8 @@ def _post_with_retry(client: httpx.Client, url: str, *, retries: int, throttle: 
             return resp
         except httpx.HTTPError as e:
             last = e
+            if not isinstance(e, httpx.HTTPStatusError):
+                limited = False  # lỗi mạng ở lần thử này: không còn là "hết hạn mức"
             if isinstance(e, httpx.HTTPStatusError):
                 break  # mã lỗi không tạm thời (400, 401, 404...) hoặc đã hết lượt thử: thử lại cũng vô ích
             if attempt < retries:

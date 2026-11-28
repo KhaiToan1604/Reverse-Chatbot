@@ -1,7 +1,8 @@
 """Kiểm tra bằng luật (rẻ, không tốn LLM) + chuẩn hoá câu hỏi trước khi lưu.
 
 Đây là lớp kiểm định thứ nhất trong ba lớp (luật -> LLM kiểm định ở validator.py -> loại trùng ở service.py).
-Được generation/service.py gọi: ensure_rubric -> check_question (trả lý do loại hoặc None) -> finalize (dict để lưu DB).
+Được generation/service.py gọi: ensure_rubric -> repair_fill_blank -> check_question (trả lý do loại hoặc None)
+-> finalize (dict để lưu DB).
 Ngưỡng và số lượng cố định (4 lựa chọn, tối đa 6 từ cho điền khuyết, 92% trích dẫn...) nằm ngay trong các hàm dưới; sửa tại đây.
 """
 
@@ -43,6 +44,22 @@ def ensure_rubric(q: RawQuestion) -> None:
     """
     if q.qtype == "short_answer" and not q.rubric and q.answer.strip():
         q.rubric = [RubricItem(point=q.answer.strip(), weight=1.0)]
+
+
+def repair_fill_blank(q: RawQuestion) -> None:
+    """fill_blank mà LLM quên chỗ trống nhưng câu hỏi lại chứa nguyên đáp án: thay đáp án bằng ____ (sửa tại chỗ).
+
+    Ví dụ "Thư viện mở cửa lúc 8 giờ sáng." với đáp án "8" -> "Thư viện mở cửa lúc ____ giờ sáng.". Rất thận trọng để không sửa sai:
+    chỉ sửa khi câu CHƯA có chỗ trống nào và đáp án (nguyên cụm, không phân biệt hoa thường) xuất hiện ĐÚNG MỘT lần trong câu hỏi.
+    Không đủ điều kiện thì để nguyên và check_question sẽ loại câu như trước. Được service.py gọi ngay sau ensure_rubric.
+    """
+    answer = q.answer.strip()
+    if q.qtype != "fill_blank" or not answer or BLANK_RE.search(q.question):
+        return
+    # (?<!\w)/(?!\w): đáp án "8" không được khớp bên trong "18" hay "80".
+    pattern = re.compile(rf"(?<!\w){re.escape(answer)}(?!\w)", re.IGNORECASE)
+    if len(pattern.findall(q.question)) == 1:
+        q.question = pattern.sub("____", q.question, count=1)
 
 
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")  # số, kể cả dạng có dấu phân cách hàng nghìn/thập phân: 2.000, 1,5
@@ -224,10 +241,9 @@ def finalize(q: RawQuestion) -> dict:
         out["meta"]["alt_answers"] = [a.strip() for a in q.alt_answers if a.strip()]
     if q.qtype in ("short_answer", "scenario") and q.rubric:
         # Chuẩn hoá trọng số về tổng 1; trọng số âm/0 được thay bằng 1 trước khi chia (LLM không phải lúc nào cũng cho tổng đúng 1).
-        total = sum(max(r.weight, 0) for r in q.rubric) or float(len(q.rubric))
-        out["rubric"] = [
-            {"point": r.point.strip(), "weight": round((max(r.weight, 0) or 1.0) / total, 4)} for r in q.rubric
-        ]
+        raw_w = [max(r.weight, 0) or 1.0 for r in q.rubric]  # trọng số <= 0 -> 1 (tính TRƯỚC khi lấy tổng để tổng luôn khớp)
+        total = sum(raw_w)
+        out["rubric"] = [{"point": r.point.strip(), "weight": round(w / total, 4)} for r, w in zip(q.rubric, raw_w, strict=True)]
         s = sum(r["weight"] for r in out["rubric"])
         # làm tròn có thể lệch vài phần vạn: bù vào ý cuối để tổng trọng số đúng bằng 1
         out["rubric"][-1]["weight"] = round(out["rubric"][-1]["weight"] + (1 - s), 4)  # tổng đúng 1
